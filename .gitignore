@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+# PyInstaller output
+build/
+dist/
+# VS Code
+.vscode/
+# Installer logs
+*.log.venv/
+build/
+dist/
+__pycache__/
+*.pyc
+# Entorno virtual
+.venv/
+# PyInstaller
+build/
+dist/
+# Cachés de Python
+__pycache__/
+*.py[cod]
