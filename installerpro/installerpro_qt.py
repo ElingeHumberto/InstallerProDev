@@ -6,8 +6,9 @@ from PySide6.QtCore    import Qt, QSettings, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QListWidget, QPushButton,
     QFileDialog, QDialog, QLineEdit, QFormLayout, QVBoxLayout,
-    QHBoxLayout, QMessageBox, QProgressBar, QMenuBar, QMenu, QAction
+    QHBoxLayout, QMessageBox, QProgressBar, QMenuBar, QMenu
 )
+from PySide6.QtGui import QAction      # ✅  QAction viene de QtGui
 from qasync           import QEventLoop, asyncSlot
 from installerpro     import core
 
