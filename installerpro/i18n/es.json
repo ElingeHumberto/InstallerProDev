@@ -1,0 +1,20 @@
+{
+  "title"      : "InstallerPro – Gestor de proyectos",
+  "btn_add"    : "Añadir",
+  "btn_del"    : "Eliminar",
+  "btn_upd"    : "Actualizar seleccionados",
+  "dlg_add"    : {
+    "title"   : "Añadir proyecto",
+    "name"    : "Nombre",
+    "url"     : "URL del repositorio",
+    "branch"  : "Rama",
+    "path"    : "Carpeta local",
+    "browse"  : "Examinar…",
+    "ok"      : "Aceptar",
+    "cancel"  : "Cancelar"
+  },
+  "msg_exists" : "El proyecto ya existe",
+  "status_ok"  : "¡Todo listo!",
+  "status_run" : "Actualizando…",
+  "menu_lang"  : "Idioma"
+}
