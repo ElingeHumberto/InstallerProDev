@@ -307,14 +307,16 @@ menubar = tk.Menu(root)
 lang_menu = tk.Menu(menubar, tearoff=0)
 lang_menu.add_command(label=LANG['es']['menu_es'], command=lambda: set_language('es'))
 lang_menu.add_command(label=LANG['en']['menu_en'], command=lambda: set_language('en'))
-menubar.add_cascade(label=LANG['es']['menu_lang'], menu=lang_menu)
+menubar.add_cascade(label=LANG['es']['menu_lang'], menu=lang_menu)     # <-- cascade Idioma
 
 # ---- menú Tema -------------------------------------------------------------
 theme_menu = tk.Menu(menubar, tearoff=0)
 theme_menu.add_command(label="System", command=lambda: apply_theme("System"))
 theme_menu.add_command(label="Light",  command=lambda: apply_theme("Light"))
 theme_menu.add_command(label="Dark",   command=lambda: apply_theme("Dark"))
-menubar.add_cascade(label="Tema", menu=theme_menu)  # cambia label si traduces
+menubar.add_cascade(label="Tema", menu=theme_menu)                     # <-- cascade Tema
+
+root.config(menu=menubar)  # <-- indispensable para que aparezca la barra
 
 title_lbl = tk.Label(root, text=TXT['title'], font=("Segoe UI", 14, "bold"))
 title_lbl.pack(pady=12)
