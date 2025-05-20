@@ -1,0 +1,14 @@
+/* dark.qss */
+QWidget {
+  background-color: #2B2B2B;
+  color: #FFFFFF;
+}
+QPushButton {
+  background-color: #3C3F41;
+  border: 1px solid #555555;
+  padding: 5px;
+}
+QPushButton:hover {
+  background-color: #4E5254;
+}
+/* añade más estilos para menús, QLineEdit, etc. */

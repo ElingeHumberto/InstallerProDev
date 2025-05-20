@@ -1,0 +1,6 @@
+17c6f1e 2025-05-08 09:27:18 -0600 fix: añadir __init__ para que installerpro sea un paquete
+a7c7960 2025-05-08 09:24:34 -0600 fix: importar QAction desde QtGui
+d52988e 2025-05-08 09:20:06 -0600 feat: Sprint 4 – diálogo Añadir + multilenguaje es/en
+8954f20 2025-05-08 09:09:24 -0600 chore: incluir paquete installerpro en spec y añadir icono
+1ea6df5 2025-05-07 17:49:11 -0600 feat: Sprint 3 – UI conectada a core con progreso async
+17fc696 2025-05-07 17:28:45 -0600 feat: Sprint 1 – GUI mínima PySide6 operativa y build exe

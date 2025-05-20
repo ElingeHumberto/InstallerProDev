@@ -8,26 +8,28 @@ include  = ["installerpro*"]
 exclude  = ["Docs"]
 
 [project]
-name    = "installerpro"
-version = "4.0.1"
-description = "Automatic multi-project Git environment installer"
-authors = [
-    {name = "Humberto Medina", email = "tu-correo@example.com"}
+name             = "installerpro"
+version          = "4.0.1"
+description      = "Automatic multi-project Git environment installer"
+readme           = "README.md"
+requires-python  = ">=3.9"
+authors          = [
+  { name = "Humberto Medina", email = "tu-correo@example.com" }
 ]
-readme = "README.md"
-requires-python = ">=3.9"
-
-# Dependencias en tiempo de ejecución
-dependencies = [
-    "requests>=2"          # (ejemplo) elimina si no las usas
+dependencies     = [
+  "requests>=2",
+  "PySide6",
+  "qasync",
+  "GitPython",
+  "PyYAML",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8",
-    "pytest-cov",
-    "black",
-    "ruff",
+  "pytest>=8",
+  "pytest-cov",
+  "black",
+  "ruff",
 ]
 
 [project.scripts]
@@ -35,4 +37,3 @@ installerpro = "installerpro.__main__:main"
 
 [tool.ruff]
 exclude = ["examples"]
-

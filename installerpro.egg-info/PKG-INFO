@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: installerpro
+Version: 0.1.0
+Summary: InstallerPro dev package
+Requires-Dist: PySide6
+Requires-Dist: qasync
+Requires-Dist: GitPython
+Requires-Dist: PyYAML

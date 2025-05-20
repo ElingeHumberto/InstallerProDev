@@ -1,46 +1,79 @@
 {
-  "title"      : "InstallerPro – Gestor de proyectos",
-  "btn_add"    : "Añadir",
-  "btn_del"    : "Eliminar",
-  "btn_upd"    : "Actualizar seleccionados",
-  "dlg_add"    : {
-    "title"   : "Añadir proyecto",
-    "name"    : "Nombre",
-    "url"     : "URL del repositorio",
-    "branch"  : "Rama",
-    "path"    : "Carpeta local",
-    "browse"  : "Examinar…",
-    "ok"      : "Aceptar",
-    "cancel"  : "Cancelar"
-  },
-  "msg_exists" : "El proyecto ya existe",
-  "status_ok"  : "¡Todo listo!",
-  "status_run" : "Actualizando…",
-  "menu_lang"  : "Idioma",
-
   "button": {
+    "add": "Añadir",
+    "remove": "Eliminar",
+    "update": "Actualizar seleccionados",
+    "default_path": "Carpeta por defecto",
+    "help": "Ayuda",
     "push": "Sincronizar con GitHub",
+    "export_log": "Exportar historial",
+    "settings": "Configuración",
     "history": "Exportar historial",
     "status": "Estado",
     "branch_new": "Crear rama",
     "branch_switch": "Cambiar rama",
-    "merge_main": "Unir a main"
+    "merge_main": "Fusionar con main"
   },
   "tooltip": {
-    "push": "Envía los commits locales al repositorio remoto",
-    "history": "Guarda commit_history.txt en el proyecto",
-    "status": "Muestra git status",
-    "branch_new": "Crea una nueva rama",
-    "branch_switch": "Cambia a otra rama",
+    "add": "Registrar un nuevo proyecto en la carpeta seleccionada",
+    "remove": "Eliminar el proyecto seleccionado de la lista",
+    "update": "Obtener los últimos cambios del repositorio",
+    "default_path": "Establecer la carpeta por defecto donde se guardan los proyectos",
+    "help": "Mostrar esta guía rápida y ayuda",
+    "push": "Enviar tus commits locales al remoto",
+    "export_log": "Generar un archivo con el historial de commits",
+    "settings": "Abrir preferencias de la aplicación",
+    "history": "Guardar commit_history.txt en el proyecto",
+    "status": "Mostrar git status",
+    "branch_new": "Crear una nueva rama",
+    "branch_switch": "Cambiar a otra rama",
     "merge_main": "Fusiona una rama en main"
   },
+  "menu": {
+    "lang": "Idioma",
+    "theme": "Tema",
+    "theme_light": "Claro",
+    "theme_dark": "Oscuro",
+    "theme_system": "Sistema"
+  },
+  "dialog": {
+    "help_title": "Ayuda"
+  },
+  "dlg_add": {
+    "title": "Añadir proyecto"
+  },
+  "dlg_default_path": {
+    "title": "Seleccionar carpeta por defecto"
+  },
+  "msg_exists": "El proyecto ya existe",
+  "status_ok": "¡Todo listo!",
+  "status_run": "Actualizando…",
   "log": {
-    "pushed": "Cambios sincronizados",
-    "history_saved": "Historial guardado en {path}"
+    "projects_reloaded": "Proyectos recargados",
+    "lang_changed": "Idioma cambiado",
+    "added": "Proyecto añadido: {path}",
+    "removed": "Proyecto eliminado",
+    "updated": "Proyecto actualizado",
+    "pushed": "Commits sincronizados",
+    "history_saved": "Historial guardado en {path}",
+    "log_exported": "Historial exportado a {path}",
+    "no_selection": "No hay proyecto seleccionado",
+    "default_path_set": "Carpeta por defecto establecida"
   },
   "error": {
-    "push": "Error al sincronizar",
-    "history": "Error al exportar historial"
+    "invalid_folder": "Carpeta inválida",
+    "add_error": "Error al añadir proyecto",
+    "remove_error": "Error al eliminar proyecto",
+    "update_error": "Error al actualizar proyecto",
+    "push_error": "Error al sincronizar commits",
+    "export_log_error": "Error al exportar historial: {error}",
+    "help_loading": "Error al cargar ayuda: {e}",
+    "help_not_found": "Archivo de ayuda no encontrado",
+    "clone_error": "Fallo en clonación",
+    "pull_error": "Fallo en obtención de cambios",
+    "stash_error": "Fallo en stash",
+    "revert_error": "Fallo en revert",
+    "rebase_error": "Fallo en rebase"
   },
   "status": {
     "ok": "Sin cambios"

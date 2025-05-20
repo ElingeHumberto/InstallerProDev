@@ -1,0 +1,15 @@
+pyproject.toml
+installerpro/__init__.py
+installerpro/docs.py
+installerpro/installerpro_qt.py
+installerpro.egg-info/PKG-INFO
+installerpro.egg-info/SOURCES.txt
+installerpro.egg-info/dependency_links.txt
+installerpro.egg-info/requires.txt
+installerpro.egg-info/top_level.txt
+installerpro/core/__init__.py
+installerpro/core/config.py
+installerpro/core/logger.py
+installerpro/core/main.py
+installerpro/i18n/__init__.py
+installerpro/i18n/i18n.py
