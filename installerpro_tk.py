@@ -93,6 +93,19 @@ def _detect_system_theme() -> str:
     except Exception:
         return "Light"   # plataformas no-Windows o error
 
+# --------- vigilancia en vivo del tema del sistema -------------------------
+_LAST_SYS_THEME = _detect_system_theme()
+
+def _watch_system_theme():
+    """Cada 3 s comprueba si el SO pasó de Light⇄Dark y reactualiza la UI."""
+    global _LAST_SYS_THEME
+    if CURRENT_THEME == "System":
+        new = _detect_system_theme()
+        if new != _LAST_SYS_THEME:
+            _LAST_SYS_THEME = new
+            apply_theme("System")      # aplica paleta nueva
+    root.after(3000, _watch_system_theme)  # re-programa
+
 # ============ Funciones utilitarias Git ============
 def run(cmd):
     """Ejecuta comando y devuelve (ok, salida)"""
@@ -375,5 +388,9 @@ exit_btn.pack(pady=4)
 
 refresh_list()
 apply_theme(CURRENT_THEME)
-root.mainloop()
 
+# arranca la vigilancia de tema si procede
+if CURRENT_THEME == "System":
+    _watch_system_theme()
+
+root.mainloop()
