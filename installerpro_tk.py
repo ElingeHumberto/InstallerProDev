@@ -76,7 +76,7 @@ THEMES = {
         "sel_fg": "#E8EAED"
     }
 }
-CURRENT_THEME = "Light"
+CURRENT_THEME = "System"
 
 # --------- helper: tema del sistema (Windows 10/11) ------------------------
 def _detect_system_theme() -> str:
@@ -110,7 +110,7 @@ def need_auth(text: str) -> bool:
 def ensure_git():
     ok, _ = run(["git", "--version"])
     if not ok:
-        messagebox.showerror("Git", TXT['git?'])
+        show_msg("error", "Git", TXT['git?'])
         raise SystemExit
 
 def safe_dir(path: str):
@@ -118,7 +118,7 @@ def safe_dir(path: str):
 
 def auth_flow():
     webbrowser.open("https://github.com/login")
-    messagebox.showinfo("Login", TXT['login'])
+    show_msg("info", "Login", TXT['login'])
 
 # ---------- Clonar o actualizar -------------------------------------------
 def clone_or_pull(name: str, url: str) -> str:
@@ -173,10 +173,6 @@ def clone_or_pull(name: str, url: str) -> str:
 
 # ============ Estilos de tema ==============================================
 def apply_theme(theme: str):
-    global CURRENT_THEME
-    CURRENT_THEME = theme
-    pal = THEMES[theme]
-def apply_theme(theme: str):
     """Aplica Light / Dark o usa el tema del sistema (‘System’)."""
     global CURRENT_THEME
     CURRENT_THEME = theme
@@ -196,6 +192,38 @@ def apply_theme(theme: str):
         btn.config(bg=pal["btn_bg"], fg=pal["btn_fg"],
                    activebackground=pal["btn_bg"],
                    activeforeground=pal["btn_fg"])
+
+# ============ Diálogos temáticos ===========================================
+def show_msg(kind: str, title: str, text: str):
+    """Muestra una ventana modal con colores según el tema."""
+    pal = THEMES[
+        _detect_system_theme() if CURRENT_THEME == "System" else CURRENT_THEME
+    ]
+    dlg = tk.Toplevel(root)
+    dlg.title(title)
+    dlg.configure(bg=pal["bg"])
+    dlg.transient(root)
+    dlg.grab_set()
+    dlg.resizable(False, False)
+
+    lbl = tk.Label(dlg, text=text, bg=pal["bg"], fg=pal["fg"],
+                   wraplength=360, justify="left", padx=20, pady=15)
+    lbl.pack()
+
+    btn = tk.Button(dlg, text="Aceptar", command=dlg.destroy,
+                    bg=pal["btn_bg"], fg=pal["btn_fg"],
+                    activebackground=pal["btn_bg"],
+                    activeforeground=pal["btn_fg"], width=12)
+    btn.pack(pady=(0, 12))
+
+    # centrado aproximado
+    dlg.update_idletasks()
+    w, h = dlg.winfo_width(), dlg.winfo_height()
+    x = root.winfo_x() + (root.winfo_width()  - w)//2
+    y = root.winfo_y() + (root.winfo_height() - h)//2
+    dlg.geometry(f"{w}x{h}+{x}+{y}")
+
+    root.wait_window(dlg)
 
 # ============ Base de datos de proyectos ============
 def load_db() -> dict:
@@ -260,7 +288,7 @@ def remove_project():
 def update_selected():
     sel = list(listbox.curselection())
     if not sel:
-        messagebox.showinfo("Info", TXT['nothing'])
+        show_msg("info", "Info", TXT['nothing'])
         return
     ensure_git()
     db = load_db()
@@ -269,9 +297,9 @@ def update_selected():
         url = db[name]
         try:
             path = clone_or_pull(name, url)
-            messagebox.showinfo("OK", TXT['ok'].format(path))
+            show_msg("info", "OK", TXT['ok'].format(path))
         except RuntimeError as e:
-            messagebox.showerror("Git error", str(e))
+            show_msg("error", "Git error", str(e))
 
 def set_language(lang_code):
     global CURRENT, TXT
