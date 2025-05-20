@@ -108,31 +108,48 @@ def auth_flow():
 # ---------- Clonar o actualizar -------------------------------------------
 def clone_or_pull(name: str, url: str) -> str:
     """Clona el repo si no existe; hace pull si ya está.
-       Tolera el caso 'no tracking information' sin abortar."""
+       Si el branch local no tiene *upstream*, lo configura automáticamente."""
     dest = os.path.join(WORKSPACE, name)
     safe_dir(dest)
 
-    # --- si no existe: clone ------------------------------------------------
+    # --- clone ----------------------------------------------------------------
     if not os.path.exists(dest) or not os.path.exists(os.path.join(dest, ".git")):
         if os.path.exists(dest):
             shutil.rmtree(dest, ignore_errors=True)
+
         ok, out = run(["git", "clone", url, dest])
         if not ok and need_auth(out):
             auth_flow(); ok, out = run(["git", "clone", url, dest])
         if not ok:
             raise RuntimeError(out)
 
-    # --- si ya existe: pull -------------------------------------------------
+    # --- pull -----------------------------------------------------------------
     else:
         ok, out = run(["git", "-C", dest, "pull"])
         if not ok and need_auth(out):
             auth_flow(); ok, out = run(["git", "-C", dest, "pull"])
 
-        # ——— tolerar falta de upstream ———
+        # ----- sin upstream: configure y repite pull --------------------------
         if (not ok and
             "no tracking information for the current branch" in out.lower()):
-            # lo consideramos actualizado (solo aviso de Git)
-            ok = True
+            # 1) Obtener branch actual
+            ok_b, branch = run(["git", "-C", dest, "rev-parse", "--abbrev-ref", "HEAD"])
+            branch = branch.strip() if ok_b else "main"
+
+            # 2) fetch para asegurar refs remotas
+            run(["git", "-C", dest, "fetch", "--all"])
+
+            # 3) configurar upstream -> origin/<branch>
+            run(["git", "-C", dest, "branch",
+                 "--set-upstream-to", f"origin/{branch}", branch])
+
+            # 4) intentar pull otra vez
+            ok, out = run(["git", "-C", dest, "pull"])
+
+                # ----- aún sin upstream → lo ignoramos ------------------------------
+        if (not ok and
+            "no tracking information for the current branch" in out.lower()):
+            ok = True    # lo damos por actualizado
 
         if not ok:
             raise RuntimeError(out)
