@@ -78,6 +78,21 @@ THEMES = {
 }
 CURRENT_THEME = "Light"
 
+# --------- helper: tema del sistema (Windows 10/11) ------------------------
+def _detect_system_theme() -> str:
+    """Lee el registro y devuelve 'Dark' o 'Light' (fallback Light)."""
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        ) as key:
+            # AppsUseLightTheme: 0 = oscuro, 1 = claro
+            use_light, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "Light" if use_light else "Dark"
+    except Exception:
+        return "Light"   # plataformas no-Windows o error
+
 # ============ Funciones utilitarias Git ============
 def run(cmd):
     """Ejecuta comando y devuelve (ok, salida)"""
@@ -161,7 +176,15 @@ def apply_theme(theme: str):
     global CURRENT_THEME
     CURRENT_THEME = theme
     pal = THEMES[theme]
+def apply_theme(theme: str):
+    """Aplica Light / Dark o usa el tema del sistema (‘System’)."""
+    global CURRENT_THEME
+    CURRENT_THEME = theme
 
+    if theme == "System":
+        theme = _detect_system_theme()
+
+    pal = THEMES[theme]
     root.configure(bg=pal["bg"])
     title_lbl.config(bg=pal["bg"], fg=pal["fg"])
     frame.config(bg=pal["bg"])
@@ -288,10 +311,10 @@ menubar.add_cascade(label=LANG['es']['menu_lang'], menu=lang_menu)
 
 # ---- menú Tema -------------------------------------------------------------
 theme_menu = tk.Menu(menubar, tearoff=0)
-theme_menu.add_command(label="Light", command=lambda: apply_theme("Light"))
-theme_menu.add_command(label="Dark",  command=lambda: apply_theme("Dark"))
+theme_menu.add_command(label="System", command=lambda: apply_theme("System"))
+theme_menu.add_command(label="Light",  command=lambda: apply_theme("Light"))
+theme_menu.add_command(label="Dark",   command=lambda: apply_theme("Dark"))
 menubar.add_cascade(label="Tema", menu=theme_menu)  # cambia label si traduces
-root.config(menu=menubar)
 
 title_lbl = tk.Label(root, text=TXT['title'], font=("Segoe UI", 14, "bold"))
 title_lbl.pack(pady=12)
