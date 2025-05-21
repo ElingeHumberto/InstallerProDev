@@ -11,7 +11,7 @@ import shutil
 import webbrowser
 import json
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import simpledialog
 
 # ============ Configuración global ============
 WORKSPACE = r"C:\Workspace"
@@ -134,28 +134,21 @@ def auth_flow():
     show_msg("info", "Login", TXT['login'])
 
 # ---------- Clonar o actualizar -------------------------------------------
-def clone_or_pull(name: str, url: str) -> str:
-    """Clona el repo si no existe; hace pull si ya está.
-       Si el branch local no tiene *upstream*, lo configura automáticamente."""
+def clone_or_pull(name: str, url: str, branch: str) -> str:
     dest = os.path.join(WORKSPACE, name)
     safe_dir(dest)
 
-    # --- clone ----------------------------------------------------------------
+    # --- clone ------------------------------------------------------------
     if not os.path.exists(dest) or not os.path.exists(os.path.join(dest, ".git")):
         if os.path.exists(dest):
             shutil.rmtree(dest, ignore_errors=True)
 
-        ok, out = run(["git", "clone", url, dest])
-        if not ok and need_auth(out):
-            auth_flow(); ok, out = run(["git", "clone", url, dest])
-        if not ok:
-            raise RuntimeError(out)
+        ok, out = run(["git", "clone", "-b", branch, url, dest])
 
-    # --- pull -----------------------------------------------------------------
+    # --- pull -------------------------------------------------------------
     else:
+        ok, out = run(["git", "-C", dest, "checkout", branch])
         ok, out = run(["git", "-C", dest, "pull"])
-        if not ok and need_auth(out):
-            auth_flow(); ok, out = run(["git", "-C", dest, "pull"])
 
         # ----- sin upstream: configure y repite pull --------------------------
         if (not ok and
@@ -188,10 +181,11 @@ def clone_or_pull(name: str, url: str) -> str:
 def apply_theme(theme: str):
     """Aplica Light / Dark o usa el tema del sistema (‘System’)."""
     global CURRENT_THEME
-    CURRENT_THEME = theme
 
     if theme == "System":
         theme = _detect_system_theme()
+
+    CURRENT_THEME = theme
 
     pal = THEMES[theme]
     root.configure(bg=pal["bg"])
@@ -245,6 +239,12 @@ def load_db() -> dict:
             base = json.load(fh)
     else:
         base = {}
+
+    # --- migración formato antiguo -----------------------------------------
+    for k, v in list(base.items()):
+        if isinstance(v, str):
+            base[k] = {"url": v, "branch": "main"}
+
     base = auto_discover(base)
     save_db(base)
     return base
@@ -265,8 +265,14 @@ def auto_discover(db: dict) -> dict:
         if entry in db:
             continue
         if os.path.isdir(os.path.join(path, ".git")):
-            ok, out = run(["git", "-C", path, "config", "--get", "remote.origin.url"])
-            db[entry] = out if ok and out else TXT['unknown']
+            ok, out = run(
+                ["git", "-C", path, "config", "--get", "remote.origin.url"]
+            )
+            # migración: si antes guardábamos solo la URL → dict con branch=main
+            db[entry] = (
+                {"url": out, "branch": "main"}
+                if ok and out else {"url": TXT['unknown'], "branch": "main"}
+            )
     return db
 
 # ============ GUI callbacks ============
@@ -279,11 +285,13 @@ def add_project():
     name = simpledialog.askstring("name", TXT['name?'])
     if not name:
         return
-    url = simpledialog.askstring("url", TXT['url?'])
+    url  = simpledialog.askstring("url",  TXT['url?'])
     if not url:
         return
+    branch = simpledialog.askstring("branch", "Branch (default: main)") or "main"
+
     db = load_db()
-    db[name] = url
+    db[name] = {"url": url, "branch": branch}   # ← guarda como dict
     save_db(db)
     refresh_list()
 
@@ -307,12 +315,14 @@ def update_selected():
     db = load_db()
     for idx in sel:
         name = listbox.get(idx)
-        url = db[name]
+        data = db[name]
+        url     = data["url"]          # ← cambia dict
+        branch  = data["branch"]
         try:
-            path = clone_or_pull(name, url)
+            path = clone_or_pull(name, url, branch)
             show_msg("info", "OK", TXT['ok'].format(path))
         except RuntimeError as e:
-            show_msg("error", "Git error", str(e))
+            show_msg("error", "Git", str(e))
 
 def set_language(lang_code):
     global CURRENT, TXT
