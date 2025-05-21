@@ -16,5 +16,43 @@
   "msg_exists" : "Project already exists",
   "status_ok"  : "All done!",
   "status_run" : "Updating…",
-  "menu_lang"  : "Language"
+  "menu_lang"  : "Language",
+
+  "button": {
+    "push": "Sync with GitHub",
+    "history": "Export history",
+    "status": "Status",
+    "branch_new": "New branch",
+    "branch_switch": "Switch branch",
+    "merge_main": "Merge to main"
+  },
+  "tooltip": {
+    "push": "Send local commits to remote",
+    "history": "Save commit_history.txt in project",
+    "status": "Show git status",
+    "branch_new": "Create a new branch",
+    "branch_switch": "Checkout another branch",
+    "merge_main": "Merge a branch into main"
+  },
+  "log": {
+    "pushed": "Changes pushed",
+    "history_saved": "History saved to {path}"
+  },
+  "error": {
+    "push": "Push error",
+    "history": "History export error"
+  },
+  "status": {
+    "ok": "No changes"
+  },
+  "branch": {
+    "new_title": "New branch",
+    "new_prompt": "New branch name:",
+    "sw_title": "Switch branch",
+    "sw_prompt": "Target branch name:"
+  },
+  "merge": {
+    "title": "Merge into main",
+    "prompt": "Branch name to merge:"
+  }
 }
