@@ -11,7 +11,27 @@ import shutil
 import webbrowser
 import json
 import tkinter as tk
+from tkinter import ttk
 from tkinter import simpledialog
+
+# ---------- ajustes persistentes -------------------------------------------
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+
+def load_settings() -> dict:
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        # valores por defecto
+        return {"lang": "es", "theme": "System"}
+
+def save_settings(lang: str, theme: str) -> None:
+    data = {"lang": lang, "theme": theme}
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+    except Exception as e:
+        print("⚠️  No se pudo guardar settings:", e)
 
 # ============ Configuración global ============
 WORKSPACE = r"C:\Workspace"
@@ -54,9 +74,6 @@ LANG = {
     }
 }
 
-CURRENT = 'es'
-TXT = LANG[CURRENT]
-
 # ---------- temas (Light / Dark) -------------------------------------------
 THEMES = {
     "Light": {
@@ -76,7 +93,11 @@ THEMES = {
         "sel_fg": "#E8EAED"
     }
 }
-CURRENT_THEME = "System"
+
+_CFG          = load_settings()
+CURRENT       = _CFG.get("lang",   "es")
+CURRENT_THEME = _CFG.get("theme",  "System")
+TXT           = LANG[CURRENT]
 
 # --------- helper: tema del sistema (Windows 10/11) ------------------------
 def _detect_system_theme() -> str:
@@ -200,6 +221,8 @@ def apply_theme(theme: str):
                    activebackground=pal["btn_bg"],
                    activeforeground=pal["btn_fg"])
 
+    save_settings(CURRENT, CURRENT_THEME)
+
 # ============ Diálogos temáticos ===========================================
 def show_msg(kind: str, title: str, text: str):
     """Muestra una ventana modal con colores según el tema."""
@@ -231,6 +254,44 @@ def show_msg(kind: str, title: str, text: str):
     dlg.geometry(f"{w}x{h}+{x}+{y}")
 
     root.wait_window(dlg)
+
+def show_confirm(text: str) -> bool:
+    """Diálogo Sí / No con colores del tema. Devuelve True si acepta."""
+    pal = THEMES[
+        _detect_system_theme() if CURRENT_THEME == "System" else CURRENT_THEME
+    ]
+    dlg = tk.Toplevel(root, bg=pal["bg"])
+    dlg.title("Confirmar")
+    dlg.transient(root)
+    dlg.grab_set()
+    dlg.resizable(False, False)
+
+    lbl = tk.Label(dlg, text=text, bg=pal["bg"], fg=pal["fg"],
+                   wraplength=360, justify="left", padx=20, pady=15)
+    lbl.pack()
+
+    f   = tk.Frame(dlg, bg=pal["bg"]); f.pack(pady=(0, 12))
+    ok  = tk.Button(f, text="Sí",  width=10,
+                    bg=pal["btn_bg"], fg=pal["btn_fg"],
+                    activebackground=pal["btn_bg"],
+                    activeforeground=pal["btn_fg"],
+                    command=lambda: dlg.destroy() or dlg.__setattr__("result", True))
+    no  = tk.Button(f, text="No",  width=10,
+                    bg=pal["btn_bg"], fg=pal["btn_fg"],
+                    activebackground=pal["btn_bg"],
+                    activeforeground=pal["btn_fg"],
+                    command=lambda: dlg.destroy() or dlg.__setattr__("result", False))
+    ok.pack(side="left", padx=6)
+    no.pack(side="right", padx=6)
+
+    dlg.result = False
+    dlg.update_idletasks()
+    w, h = dlg.winfo_width(), dlg.winfo_height()
+    x = root.winfo_x() + (root.winfo_width()  - w)//2
+    y = root.winfo_y() + (root.winfo_height() - h)//2
+    dlg.geometry(f"{w}x{h}+{x}+{y}")
+    root.wait_window(dlg)
+    return dlg.result
 
 # ============ Base de datos de proyectos ============
 def load_db() -> dict:
@@ -299,6 +360,17 @@ def remove_project():
     sel = list(listbox.curselection())
     if not sel:
         return
+
+    names = [listbox.get(i) for i in sel]
+    msg   = "\n".join(names)
+    if len(names) == 1:
+        txt = f"¿Eliminar el proyecto?\n\n{msg}"
+    else:
+        txt = f"¿Eliminar estos {len(names)} proyectos?\n\n{msg}"
+
+    if show_confirm(txt) is False:      # ← usuario canceló
+        return
+
     db = load_db()
     for idx in reversed(sel):
         name = listbox.get(idx)
@@ -311,18 +383,30 @@ def update_selected():
     if not sel:
         show_msg("info", "Info", TXT['nothing'])
         return
+
     ensure_git()
-    db = load_db()
-    for idx in sel:
-        name = listbox.get(idx)
-        data = db[name]
-        url     = data["url"]          # ← cambia dict
-        branch  = data["branch"]
+    db   = load_db()
+    jobs = [listbox.get(i) for i in sel]
+
+    progress["maximum"] = len(jobs)
+    progress["value"]   = 0
+    root.update_idletasks()
+
+    for i, name in enumerate(jobs, 1):
+        data   = db[name]
+        url    = data["url"]
+        branch = data["branch"]
         try:
-            path = clone_or_pull(name, url, branch)
-            show_msg("info", "OK", TXT['ok'].format(path))
+            clone_or_pull(name, url, branch)
         except RuntimeError as e:
-            show_msg("error", "Git", str(e))
+            show_msg("error", "Git", f"{name} → {e}")
+            continue
+        finally:
+            progress["value"] = i
+            root.update_idletasks()
+
+    show_msg("info", "OK", TXT['ok'].format(WORKSPACE))
+    progress["value"] = 0          # reinicia
 
 def set_language(lang_code):
     global CURRENT, TXT
@@ -345,6 +429,8 @@ def set_language(lang_code):
     upd_btn.config(text=TXT['update'])
     exit_btn.config(text=TXT['exit'])
     refresh_list()
+
+    save_settings(CURRENT, CURRENT_THEME)
 
 # ============ GUI ============
 root = tk.Tk()
@@ -395,6 +481,9 @@ add_btn.pack(pady=4)
 rem_btn.pack(pady=4)
 upd_btn.pack(pady=6)
 exit_btn.pack(pady=4)
+
+progress = ttk.Progressbar(root, length=260, mode="determinate")
+progress.pack(pady=(2, 4))
 
 refresh_list()
 apply_theme(CURRENT_THEME)
