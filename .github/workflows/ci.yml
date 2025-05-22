@@ -26,6 +26,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies (editable + dev extras)
+      # 👇 fuerza a ejecutar pip en la raíz del checkout
+      working-directory: ${{ github.workspace }}
       run: |
         python -m pip install --upgrade pip
         python -m pip install -e .[dev]
