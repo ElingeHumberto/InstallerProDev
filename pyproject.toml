@@ -1,0 +1,38 @@
+[build-system]
+requires      = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where    = ["."]
+include  = ["installerpro*"]
+exclude  = ["Docs"]
+
+[project]
+name    = "installerpro"
+version = "4.0.0"
+description = "Automatic multi-project Git environment installer"
+authors = [
+    {name = "Humberto Medina", email = "tu-correo@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+
+# Dependencias en tiempo de ejecución
+dependencies = [
+    "requests>=2"          # (ejemplo) elimina si no las usas
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "black",
+    "ruff",
+]
+
+[project.scripts]
+installerpro = "installerpro.__main__:main"
+
+[tool.ruff]
+exclude = ["examples"]
+

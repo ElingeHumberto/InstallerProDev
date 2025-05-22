@@ -20,3 +20,4 @@ dist/
 # Cachés de Python
 __pycache__/
 *.py[cod]
+settings.json
