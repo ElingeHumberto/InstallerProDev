@@ -25,11 +25,12 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+       - name: Cache pip            # ← paso
+      uses: actions/cache@v4     # ← 2 espacios
+      with:                      # ← 2 espacios (antes estaba pegado a la
+        path: ~/.cache/pip       # ← 4 espacios
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+
 
     - name: Install dependencies (editable + dev extras)
         run: |
