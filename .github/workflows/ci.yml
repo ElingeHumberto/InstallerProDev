@@ -14,37 +14,35 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ['3.11', '3.12', '3.13']   # ajusta a lo que soportas
+        python-version: ['3.11', '3.12', '3.13']
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Cache pip           # ← mismo nivel que los demás pasos
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
 
-
-
-    - name: Install dependencies (editable + dev extras)
+      - name: Install dependencies (editable + dev extras)
         run: |
-        python -m pip install --upgrade pip
-        python -m pip install -e .[dev]
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
 
-    # ---- Static analysis --------------------------------------------------
-    - name: Ruff (lint + style)
-      run: ruff check .
+      # ---- Static analysis -------------------------------------------------
+      - name: Ruff (lint + style)
+        run: ruff check .
 
-    - name: Black --check
-      run: black --check .
+      - name: Black --check
+        run: black --check .
 
-    # ---- Test suite -------------------------------------------------------
-    - name: Run pytest
-      run: pytest -q
+      # ---- Test suite ------------------------------------------------------
+      - name: Run pytest
+        run: pytest -q
