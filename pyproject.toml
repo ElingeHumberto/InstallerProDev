@@ -9,7 +9,7 @@ exclude  = ["Docs"]
 
 [project]
 name    = "installerpro"
-version = "4.0.0"
+version = "4.0.1"
 description = "Automatic multi-project Git environment installer"
 authors = [
     {name = "Humberto Medina", email = "tu-correo@example.com"}
