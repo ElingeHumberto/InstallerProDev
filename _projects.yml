@@ -1,0 +1,4 @@
+- name: auto-mail-pro
+  url: https://github.com/ElingeHumberto/auto-mail-pro.git
+  branch: main
+  path: C:/Workspace/auto-mail-pro

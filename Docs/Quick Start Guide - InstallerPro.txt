@@ -1,0 +1,28 @@
+# Quick Start Guide - InstallerPro
+
+Welcome! This application helps you keep your projects organized and automatically synchronized from GitHub.
+
+## Getting Started
+
+1. **Choose a language** from the top dropdown.
+
+2. Click **Add** to register a new project:
+
+   * Project name
+   * Repository URL
+   * Branch (default: `main`)
+   * Local folder where the project will be cloned
+
+3. Use **Update** to pull changes from the repository.
+
+4. Remove projects with the **Remove** button.
+
+## Tips
+
+* Use valid local paths (e.g. `C:/Projects/MyApp`)
+* You can change the language at any time
+* If something goes wrong, the status box will show the error
+
+---
+
+💡 Got ideas or found a bug? Send us feedback with the error log shown below.

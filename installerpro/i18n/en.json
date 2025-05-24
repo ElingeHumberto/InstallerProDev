@@ -1,46 +1,79 @@
 {
-  "title"      : "InstallerPro – Project manager",
-  "btn_add"    : "Add",
-  "btn_del"    : "Remove",
-  "btn_upd"    : "Update selected",
-  "dlg_add"    : {
-    "title"   : "Add project",
-    "name"    : "Name",
-    "url"     : "Repository URL",
-    "branch"  : "Branch",
-    "path"    : "Local folder",
-    "browse"  : "Browse…",
-    "ok"      : "OK",
-    "cancel"  : "Cancel"
-  },
-  "msg_exists" : "Project already exists",
-  "status_ok"  : "All done!",
-  "status_run" : "Updating…",
-  "menu_lang"  : "Language",
-
   "button": {
+    "add": "Add",
+    "remove": "Remove",
+    "update": "Update selected",
+    "default_path": "Default folder",
+    "help": "Help",
     "push": "Sync with GitHub",
+    "export_log": "Export history",
+    "settings": "Settings",
     "history": "Export history",
     "status": "Status",
     "branch_new": "New branch",
     "branch_switch": "Switch branch",
-    "merge_main": "Merge to main"
+    "merge_main": "Merge into main"
   },
   "tooltip": {
+    "add": "Register a new project in the selected folder",
+    "remove": "Remove the selected project from the list",
+    "update": "Pull the latest changes for this project from the repository",
+    "default_path": "Set the default folder where projects are stored",
+    "help": "Show this quick start guide and help",
     "push": "Send local commits to remote",
+    "export_log": "Generate a file with the project's commit history",
+    "settings": "Open application preferences",
     "history": "Save commit_history.txt in project",
     "status": "Show git status",
     "branch_new": "Create a new branch",
     "branch_switch": "Checkout another branch",
     "merge_main": "Merge a branch into main"
   },
+  "menu": {
+    "lang": "Language",
+    "theme": "Theme",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "theme_system": "System"
+  },
+  "dialog": {
+    "help_title": "Help"
+  },
+  "dlg_add": {
+    "title": "Add project"
+  },
+  "dlg_default_path": {
+    "title": "Select default folder"
+  },
+  "msg_exists": "Project already exists",
+  "status_ok": "All done!",
+  "status_run": "Updating…",
   "log": {
+    "projects_reloaded": "Projects reloaded",
+    "lang_changed": "Language changed",
+    "added": "Project added: {path}",
+    "removed": "Project removed",
+    "updated": "Project updated",
     "pushed": "Changes pushed",
-    "history_saved": "History saved to {path}"
+    "history_saved": "History saved to {path}",
+    "log_exported": "Commit history exported to {path}",
+    "no_selection": "No project selected",
+    "default_path_set": "Default path set"
   },
   "error": {
-    "push": "Push error",
-    "history": "History export error"
+    "invalid_folder": "Invalid folder",
+    "add_error": "Error adding project",
+    "remove_error": "Error removing project",
+    "update_error": "Error updating project",
+    "push_error": "Error pushing commits",
+    "export_log_error": "Error exporting log: {error}",
+    "help_loading": "Error loading help: {e}",
+    "help_not_found": "Help file not found",
+    "clone_error": "Clone failed",
+    "pull_error": "Pull failed",
+    "stash_error": "Stash failed",
+    "revert_error": "Revert failed",
+    "rebase_error": "Rebase failed"
   },
   "status": {
     "ok": "No changes"
