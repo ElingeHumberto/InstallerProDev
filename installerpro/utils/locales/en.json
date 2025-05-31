@@ -1,9 +1,11 @@
         {
             "App Title": "InstallerPro - Git Project Manager",
             "Base folder created: {folder}": "Base folder created: {folder}",
+            "Untitled - Git Project Manager": "Untitled - Git Project Manager",
             "App Title started.": " started.",
             "View Menu": "View",
             "Language Menu": "Language",
+            "Label": "Label",
             "Project Name Column": "Project Name",
             "Local Path Column": "Local Path",
             "Repository URL Column": "Repository URL",

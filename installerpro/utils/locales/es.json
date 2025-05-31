@@ -1,9 +1,11 @@
         {
             "App Title": "InstallerPro - Gestor de Proyectos Git",
             "Base folder created: {folder}": "Carpeta base creada: {folder}",
+            "Untitled - Git Project Manager": "Sin Título - Gestor de Proyectos Git",
             "App Title started.": " iniciado.",
             "View Menu": "Ver",
             "Language Menu": "Idioma",
+            "Label": "Etiqueta",
             "Project Name Column": "Nombre del Proyecto",
             "Local Path Column": "Ruta Local",
             "Repository URL Column": "URL del Repositorio",

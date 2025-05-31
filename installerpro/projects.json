@@ -1,0 +1,18 @@
+[
+    {
+        "name": "auto-mail-pro",
+        "repo_url": "https://github.com/ElingeHumberto/auto-mail-pro.git",
+        "local_path": "C:\\Workspace\\auto-mail-pro",
+        "branch": "feature/setup-prisma",
+        "status": "Up-to-date",
+        "deleted": false
+    },
+    {
+        "name": "InstallerProDev",
+        "repo_url": "https://github.com/ElingeHumberto/InstallerProDev.git",
+        "local_path": "C:\\Workspace\\InstallerProDev",
+        "branch": "master",
+        "status": "Untracked changes",
+        "deleted": false
+    }
+]
