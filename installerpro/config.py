@@ -1,8 +1,7 @@
-# installerpro/config.py
 import os
 import json
 import logging
-import sys # Asegúrate de que sys esté importado para sys.platform
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +10,7 @@ class ConfigManager:
         self.app_name = app_name
         self.config_dir = self._get_config_directory()
         self.config_file = os.path.join(self.config_dir, "config.json")
+        self.projects_file = os.path.join(self.config_dir, "projects.json") # <--- AÑADIDO: Ruta para projects.json
         self._config_data = self._load_config()
         logger.info(f"Configuration loaded from {self.config_file}")
 
@@ -35,7 +35,7 @@ class ConfigManager:
         return config_dir
 
     def _load_config(self):
-        """Carga la configuración desde el archivo JSON o devuelve una configuración por defecto."""
+        """Carga la configuración general desde el archivo JSON o devuelve una configuración por defecto."""
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, "r", encoding="utf-8") as f:
@@ -54,7 +54,7 @@ class ConfigManager:
         return default_config
 
     def _save_config(self, config_data):
-        """Guarda la configuración en el archivo JSON."""
+        """Guarda la configuración general en el archivo JSON."""
         try:
             with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=4)
@@ -63,11 +63,11 @@ class ConfigManager:
             logger.error(f"Error saving config file {self.config_file}: {e}")
 
     def get_setting(self, key, default=None):
-        """Obtiene un valor de configuración."""
+        """Obtiene un valor de configuración general."""
         return self._config_data.get(key, default)
 
     def set_setting(self, key, value):
-        """Establece un valor de configuración y lo guarda."""
+        """Establece un valor de configuración general y lo guarda."""
         self._config_data[key] = value
         self._save_config(self._config_data)
 
@@ -87,7 +87,32 @@ class ConfigManager:
 
     def set_language(self, lang_code):
         """Establece el idioma configurado y lo guarda."""
-        # Puedes añadir una validación aquí para asegurar que el idioma es válido
         self.set_setting("language", lang_code)
         logger.info(f"Language set to: {lang_code}")
         return True # Asume éxito por ahora
+
+    # --- Métodos para la gestión de PROYECTOS ---
+    def get_projects(self): # <--- ¡MÉTODO AÑADIDO!
+        """Carga la lista de proyectos desde projects.json."""
+        projects = []
+        if os.path.exists(self.projects_file):
+            try:
+                with open(self.projects_file, 'r', encoding='utf-8') as f:
+                    projects = json.load(f)
+                logger.info(f"Projects loaded from {self.projects_file}")
+            except json.JSONDecodeError:
+                logger.error(f"Error decoding projects.json at {self.projects_file}. Starting with empty projects list.")
+                projects = []
+            except Exception as e:
+                logger.error(f"Unexpected error loading projects from {self.projects_file}: {e}")
+                projects = []
+        return projects
+
+    def set_projects(self, projects_list): # <--- ¡MÉTODO AÑADIDO!
+        """Guarda la lista de proyectos en projects.json."""
+        try:
+            with open(self.projects_file, 'w', encoding='utf-8') as f:
+                json.dump(projects_list, f, indent=4)
+            logger.info(f"Projects saved to {self.projects_file}")
+        except Exception as e:
+            logger.error(f"Failed to save projects to {self.projects_file}: {e}")

@@ -1,36 +1,28 @@
-# installerpro/core/logging_config.py
 import logging
 import os
-import sys 
+import sys
 from datetime import datetime
 
-def setup_logging(log_file="installerpro.log", level=logging.INFO):
-    """
-    Configura el sistema de logging para la aplicación.
-    Los logs se escribirán en un archivo y también se mostrarán en la consola.
-    """
-    # Crear el directorio de logs si no existe
-    log_dir = os.path.join(os.path.expanduser("~"), ".installerpro_logs")
-    os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, log_file)
+def setup_logging():
+    log_file_path = os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'InstallerPro', 'installerpro.log')
+    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+    root_logger = logging.getLogger()
+    # root_logger.setLevel(logging.INFO) # Comenta o cambia a DEBUG para ver todos los mensajes
+    root_logger.setLevel(logging.DEBUG) # <--- ASEGÚRATE QUE ESTÉ ASÍ (o al menos INFO)
 
     # Configuración básica del logger
-    # Asegúrate de que el logger raíz no tenga ya handlers para evitar duplicados
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-        handler.close()
-
     logging.basicConfig(
-        level=level,
+        level=logging.INFO, # Nivel mínimo de log
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_path, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout) # Salida a consola
+            logging.FileHandler(log_file_path, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout) # También imprime en consola
         ]
     )
-    logger = logging.getLogger(__name__)
-    logger.info("Logging configured.")
-    return logger
-
-# Si este módulo se importa, el logging se configurará automáticamente.
-# Puedes llamar a setup_logging() explícitamente si necesitas cambiar la configuración en tiempo de ejecución.
+    # Establecer niveles de log específicos para módulos para controlar la verbosidad
+    logging.getLogger('installerpro.core.git_operations').setLevel(logging.INFO) # Para ver info de Git
+    logging.getLogger('installerpro.core.project_manager').setLevel(logging.INFO) # Para ver info del ProjectManager
+    logging.getLogger('installerpro.i18n').setLevel(logging.INFO) # Para ver info de i18n
+    
+    return logging.getLogger('installerpro') # Devuelve el logger principal de la app

@@ -1,231 +1,314 @@
-# installerpro/core/project_manager.py
 import os
 import json
 import logging
-from installerpro.core import git_operations # Importa el módulo de operaciones Git
+from installerpro.config import ConfigManager
+from installerpro.core.git_operations import git_clone_project, git_pull_project, git_push_project, git_get_status, git_get_current_branch, git_is_repo, GitOperationError
 
 logger = logging.getLogger(__name__)
 
 class ProjectNotFoundError(Exception):
-    """Excepción personalizada cuando un proyecto no se encuentra."""
+    """Excepción lanzada cuando un proyecto no se encuentra en la configuración."""
     pass
 
 class ProjectManager:
-    def __init__(self, initial_base_folder, config_manager):
+    def __init__(self, base_folder, config_manager: ConfigManager):
+        self.base_folder = os.path.normpath(base_folder)
         self.config_manager = config_manager
-        self._base_folder = initial_base_folder # Usar la carpeta base inicial
-        self.projects_file = os.path.join(self.config_manager.config_dir, "projects.json")
-        self._projects = self._load_projects()
-        logger.info("ProjectManager initialized.")
+        self.projects_data = self._load_projects_data() # Cargar proyectos al inicio
 
-    def _load_projects(self):
-        """Carga la lista de proyectos desde el archivo JSON."""
-        if os.path.exists(self.projects_file):
-            try:
-                with open(self.projects_file, "r", encoding="utf-8") as f:
-                    projects = json.load(f)
-                    # Asegurarse de que cada proyecto tenga un 'status' por defecto si no lo tiene
-                    for project in projects:
-                        project.setdefault('status', 'Unknown')
-                        project.setdefault('deleted', False) # Añadir campo 'deleted'
-                    logger.info(f"Loaded {len(projects)} projects from {self.projects_file}")
-                    return projects
-            except json.JSONDecodeError as e:
-                logger.error(f"Error decoding projects file {self.projects_file}: {e}. Starting with empty list.")
-            except Exception as e:
-                logger.error(f"Error loading projects file {self.projects_file}: {e}. Starting with empty list.")
-        logger.info("No existing projects file found. Starting with empty project list.")
-        return []
+    def set_base_folder(self, new_base_folder):
+        """Cambia la carpeta base y recarga los proyectos."""
+        self.base_folder = os.path.normpath(new_base_folder)
+        os.makedirs(self.base_folder, exist_ok=True)
+        self.projects_data = self._load_projects_data() # Recargar proyectos después de cambiar la base
+        logger.info(f"ProjectManager base folder updated to: {self.base_folder}")
 
-    def _save_projects(self):
-        """Guarda la lista actual de proyectos en el archivo JSON."""
-        try:
-            with open(self.projects_file, "w", encoding="utf-8") as f:
-                json.dump(self._projects, f, indent=4)
-            logger.info(f"Projects saved to {self.projects_file}")
-        except Exception as e:
-            logger.error(f"Error saving projects file {self.projects_file}: {e}")
+    def _load_projects_data(self):
+        """Carga los datos de los proyectos desde el archivo de configuración."""
+        projects = self.config_manager.get_projects()
+        # Asegurarse de que todos los proyectos tienen un estado y que la ruta sea normalizada
+        for p in projects:
+            p['local_path'] = os.path.normpath(p['local_path'])
+            if 'status' not in p:
+                p['status'] = 'Unknown' # Estado inicial si no existe
+            if 'deleted' not in p:
+                p['deleted'] = False # Asegurarse de que el flag 'deleted' exista
+        logger.info(f"Loaded {len(projects)} projects from config.")
+        return projects
+
+    def _save_projects_data(self):
+        """Guarda los datos de los proyectos en el archivo de configuración."""
+        self.config_manager.set_projects(self.projects_data)
+        logger.info(f"Saved {len(self.projects_data)} projects to config.")
 
     def get_projects(self):
-        """Devuelve la lista actual de proyectos."""
-        return self._projects
+        """Devuelve la lista actual de proyectos, excluyendo los marcados como eliminados."""
+        return [p for p in self.projects_data if not p.get('deleted', False)]
 
     def get_project_by_path(self, local_path):
         """Busca un proyecto por su ruta local."""
-        for project in self._projects:
-            if project['local_path'] == local_path:
+        normalized_path = os.path.normpath(local_path)
+        for project in self.projects_data:
+            # Incluye proyectos marcados como borrados para poder re-activarlos si se escanean
+            if os.path.normpath(project['local_path']) == normalized_path: 
                 return project
         return None
+    
+    def get_active_project_by_path(self, local_path):
+        """Busca un proyecto por su ruta local, solo si NO está marcado como eliminado."""
+        project = self.get_project_by_path(local_path)
+        if project and not project.get('deleted', False):
+            return project
+        return None
 
-    def add_project(self, name, repo_url, local_path_full, branch=None):
-        """Añade un nuevo proyecto clonando el repositorio."""
-        if self.get_project_by_path(local_path_full):
-            logger.warning(f"Project already exists at {local_path_full}. Skipping add.")
-            raise ValueError(f"Project already exists at {local_path_full}")
-
-        # Asegura que la carpeta padre exista para el clonado
-        parent_dir = os.path.dirname(local_path_full)
-        os.makedirs(parent_dir, exist_ok=True)
+    def add_project(self, name, repo_url, local_path, branch="main"):
+        """Añade un nuevo proyecto y lo clona."""
+        normalized_local_path = os.path.normpath(local_path)
+        
+        # Verificar si ya existe un proyecto ACTIVO con esa ruta
+        if self.get_active_project_by_path(normalized_local_path):
+            logger.warning(f"Project at {normalized_local_path} already exists and is active.")
+            raise GitOperationError("Project already exists and is active at this path.")
+        
+        # Si existe un proyecto borrado con esa ruta, lo reactivamos
+        existing_project = self.get_project_by_path(normalized_local_path)
+        if existing_project and existing_project.get('deleted', False):
+            logger.info(f"Reactivating deleted project at {normalized_local_path}.")
+            existing_project.update({
+                'name': name,
+                'repo_url': repo_url,
+                'local_path': normalized_local_path,
+                'branch': branch,
+                'status': 'Cloning/Updating (Reactivated)...',
+                'deleted': False # Reactivar
+            })
+            project_data = existing_project
+        else:
+            project_data = {
+                'name': name,
+                'repo_url': repo_url,
+                'local_path': normalized_local_path,
+                'branch': branch,
+                'status': 'Cloning...', # Estado inicial mientras se clona
+                'deleted': False # Asegurarse de que sea un proyecto activo
+            }
+            self.projects_data.append(project_data)
+        
+        self._save_projects_data() # Guardar inmediatamente para que la GUI refleje el estado
 
         try:
-            git_operations.clone_repository(repo_url, local_path_full, branch)
-            new_project = {
-                "name": name,
-                "repo_url": repo_url,
-                "local_path": local_path_full,
-                "branch": branch if branch else "master", # O la rama por defecto del repo
-                "status": "Cloned",
-                "deleted": False # Por defecto no eliminado
-            }
-            self._projects.append(new_project)
-            self._save_projects()
-            logger.info(f"Project '{name}' added and cloned successfully.")
-            return new_project # Devuelve el proyecto añadido para el callback
-        except git_operations.GitOperationError as e:
-            logger.error(f"Failed to add project '{name}' due to Git error: {e}")
-            raise # Re-lanza la excepción para que el UI la maneje
-        except Exception as e:
-            logger.error(f"An unexpected error occurred while adding project '{name}': {e}")
-            raise
+            logger.info(f"Cloning project '{name}' from {repo_url} to {normalized_local_path} on branch {branch}...")
+            # git_clone_project maneja la creación del directorio final si no existe
+            git_clone_project(repo_url, normalized_local_path, branch)
+            project_data['status'] = 'Clean'
+            logger.info(f"Project '{name}' cloned successfully.")
+        except GitOperationError as e:
+            project_data['status'] = f'Failed: {e}'
+            logger.error(f"Failed to clone project '{name}': {e}")
+            raise # Relanzar para que el callback de fallo en la GUI lo capture
+        finally:
+            self._save_projects_data() # Guardar el estado final
+
+        return project_data # Devolver los datos del proyecto actualizado
+
+    def edit_project_metadata(self, original_local_path, new_name, new_repo_url, new_local_path, new_branch): # <--- ¡MÉTODO AÑADIDO!
+        """
+        Edita los metadatos de un proyecto existente.
+        No realiza operaciones Git, solo actualiza los datos almacenados.
+        """
+        original_normalized_path = os.path.normpath(original_local_path)
+        new_normalized_path = os.path.normpath(new_local_path)
+
+        project = self.get_project_by_path(original_normalized_path)
+        if not project:
+            raise ProjectNotFoundError(f"Project at {original_local_path} not found for editing.")
+        
+        # Si la ruta local ha cambiado, verificar si la nueva ruta ya existe y está activa
+        if original_normalized_path != new_normalized_path:
+            if self.get_active_project_by_path(new_normalized_path):
+                raise GitOperationError(f"Cannot change path to '{new_local_path}' because another active project already exists there.")
+            
+            # Si el proyecto se movió físicamente, actualizamos la ruta
+            # Nota: Esto no mueve la carpeta en disco, solo actualiza el registro
+            logger.info(f"Project path changed from '{original_normalized_path}' to '{new_normalized_path}'.")
+            project['local_path'] = new_normalized_path
+            
+        # Actualizar otros campos
+        project['name'] = new_name
+        project['repo_url'] = new_repo_url
+        project['branch'] = new_branch
+        project['status'] = 'Metadata Updated' # Nuevo estado para indicar solo cambio de datos
+
+        self._save_projects_data()
+        logger.info(f"Project '{new_name}' metadata updated successfully.")
+        return project
+
 
     def remove_project(self, local_path, permanent=False):
-        """
-        Elimina un proyecto. Por defecto, lo marca como eliminado (soft delete).
-        Si permanent=True, lo elimina completamente del disco y de la configuración.
-        """
-        project_found = False
-        for i, project in enumerate(self._projects):
-            if project['local_path'] == local_path:
-                project_found = True
-                if permanent:
-                    # Eliminar físicamente la carpeta del proyecto
-                    if os.path.exists(local_path):
-                        try:
-                            import shutil
-                            shutil.rmtree(local_path)
-                            logger.info(f"Physically removed project folder: {local_path}")
-                        except Exception as e:
-                            logger.error(f"Failed to physically remove folder {local_path}: {e}")
-                            raise git_operations.GitOperationError(f"Failed to remove folder: {e}")
-                    self._projects.pop(i) # Eliminar de la lista de proyectos
-                    logger.info(f"Project '{project['name']}' permanently removed.")
-                else:
-                    project['deleted'] = True # Marcar como eliminado
-                    project['status'] = 'Deleted'
-                    logger.info(f"Project '{project['name']}' marked as deleted.")
-                self._save_projects()
-                return # Salir después de encontrar y procesar el proyecto
-        
-        if not project_found:
-            logger.warning(f"Attempted to remove non-existent project at path: {local_path}")
-            raise ProjectNotFoundError(f"Project not found at path: {local_path}")
+        """Elimina un proyecto (marcado o físico)."""
+        project = self.get_project_by_path(local_path) # Usar get_project_by_path para encontrar incluso borrados
+        if not project:
+            raise ProjectNotFoundError(f"Project at {local_path} not found for removal.")
 
+        if permanent:
+            try:
+                if os.path.exists(project['local_path']):
+                    import shutil
+                    shutil.rmtree(project['local_path'])
+                    logger.info(f"Physically removed project folder: {project['local_path']}")
+                # Eliminar el proyecto de la lista de datos
+                self.projects_data = [p for p in self.projects_data if os.path.normpath(p['local_path']) != os.path.normpath(local_path)]
+                logger.info(f"Project '{project['name']}' physically removed from config.")
+            except Exception as e:
+                logger.error(f"Failed to physically remove project '{project['name']}': {e}")
+                raise GitOperationError(f"Failed to physically remove folder: {e}")
+        else:
+            project['deleted'] = True
+            project['status'] = 'Deleted'
+            logger.info(f"Project '{project['name']}' marked as deleted.")
+        
+        self._save_projects_data()
+        return True
 
     def update_project(self, local_path, do_pull=True):
-        """Actualiza un proyecto (realiza un pull)."""
-        project = self.get_project_by_path(local_path)
+        """Actualiza un proyecto Git (realiza pull)."""
+        project = self.get_active_project_by_path(local_path) # Solo actualizar proyectos activos
         if not project:
-            raise ProjectNotFoundError(f"Project not found at path: {local_path}")
+            raise ProjectNotFoundError(f"Active project at {local_path} not found for update.")
+        
+        # Si no es un repo Git o la carpeta no existe, intentar clonar
+        if not os.path.exists(local_path) or not git_is_repo(local_path):
+            logger.warning(f"'{local_path}' no es un repositorio Git válido o no existe. Intentando clonar en su lugar.")
+            # Si el proyecto ya existe en la lista pero la carpeta no, lo tratamos como un re-clon
+            return self.add_project(project['name'], project['repo_url'], project['local_path'], project['branch'])
+
+
+        original_status = project.get('status', 'Unknown')
+        project['status'] = 'Updating...'
+        self._save_projects_data()
+        logger.info(f"Updating project '{project['name']}' at {local_path} (pull)...")
         
         try:
             if do_pull:
-                result = git_operations.pull_repository(local_path)
-                project['status'] = git_operations.get_repo_status(local_path) # Actualiza el estado después del pull
-                self._save_projects()
+                git_pull_project(local_path, project['branch'])
+                project['status'] = 'Clean'
                 logger.info(f"Project '{project['name']}' updated successfully.")
-                return result # Devuelve el resultado del pull
+                return "Up-to-date" # O parsear el output de git pull para más detalles
             else:
-                logger.info(f"Project '{project['name']}' update skipped (no pull requested).")
+                project['status'] = 'Clean' # No se hizo pull, solo se marca como limpio
                 return "No pull performed"
-        except git_operations.GitOperationError as e:
-            project['status'] = f"Error: {e}"
-            self._save_projects()
-            logger.error(f"Failed to update project '{project['name']}' due to Git error: {e}")
+        except GitOperationError as e:
+            project['status'] = f'Failed: {e}'
+            logger.error(f"Failed to update project '{project['name']}': {e}")
             raise
-        except Exception as e:
-            logger.error(f"An unexpected error occurred while updating project '{project['name']}': {e}")
-            raise
+        finally:
+            self._save_projects_data()
 
     def push_project(self, local_path):
-        """Empuja los cambios de un proyecto al remoto."""
-        project = self.get_project_by_path(local_path)
+        """Empuja cambios de un proyecto Git al remoto."""
+        project = self.get_active_project_by_path(local_path) # Solo empujar proyectos activos
         if not project:
-            raise ProjectNotFoundError(f"Project not found at path: {local_path}")
-        
+            raise ProjectNotFoundError(f"Active project at {local_path} not found for push.")
+
+        if not git_is_repo(local_path):
+            raise GitOperationError(f"'{local_path}' is not a Git repository. Cannot push.")
+
+        original_status = project.get('status', 'Unknown')
+        project['status'] = 'Pushing...'
+        self._save_projects_data()
+        logger.info(f"Pushing project '{project['name']}' from {local_path}...")
+
         try:
-            result = git_operations.push_repository(local_path)
-            project['status'] = git_operations.get_repo_status(local_path) # Actualiza el estado después del push
-            self._save_projects()
+            git_push_project(local_path)
+            project['status'] = 'Clean' # Asumimos clean después de push
             logger.info(f"Project '{project['name']}' pushed successfully.")
-            return result # Devuelve el resultado del push
-        except git_operations.GitOperationError as e:
-            project['status'] = f"Error: {e}"
-            self._save_projects()
-            logger.error(f"Failed to push project '{project['name']}' due to Git error: {e}")
+            return "Pushed" # O parsear el output de git push
+        except GitOperationError as e:
+            project['status'] = f'Failed: {e}'
+            logger.error(f"Failed to push project '{project['name']}': {e}")
             raise
-        except Exception as e:
-            logger.error(f"An unexpected error occurred while pushing project '{project['name']}': {e}")
-            raise
-
-    def scan_base_folder(self):
-        """
-        Escanea la carpeta base en busca de nuevos repositorios Git
-        y los añade a la configuración si no están ya presentes.
-        """
-        new_projects_count = 0
-        current_base_folder = self.config_manager.get_base_folder()
-        
-        if not os.path.exists(current_base_folder):
-            logger.warning(f"Base folder '{current_base_folder}' does not exist. Skipping scan.")
-            return new_projects_count
-
-        for item_name in os.listdir(current_base_folder):
-            item_path = os.path.join(current_base_folder, item_name)
-            if os.path.isdir(item_path) and git_operations.is_git_repository(item_path):
-                if not self.get_project_by_path(item_path):
-                    # Este es un nuevo repositorio Git no configurado
-                    # Intentar obtener la URL remota y la rama para una configuración más completa
-                    repo_url = "Unknown"
-                    branch = "master" # Asumir master si no se puede determinar
-                    try:
-                        repo_url = git_operations._run_git_command(["git", "config", "--get", "remote.origin.url"], item_path)
-                        branch = git_operations._run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], item_path)
-                    except git_operations.GitOperationError:
-                        logger.warning(f"Could not determine repo URL or branch for new project at {item_path}. Using defaults.")
-                    
-                    new_project = {
-                        "name": item_name,
-                        "repo_url": repo_url,
-                        "local_path": item_path,
-                        "branch": branch,
-                        "status": git_operations.get_repo_status(item_path), # Obtener el estado inicial
-                        "deleted": False
-                    }
-                    self._projects.append(new_project)
-                    new_projects_count += 1
-                    logger.info(f"Found and added new project during scan: '{item_name}' at '{item_path}'")
-                else:
-                    logger.debug(f"Project at '{item_path}' already configured. Skipping.")
-        
-        self._save_projects()
-        logger.info(f"Scan complete. Added {new_projects_count} new projects.")
-        return new_projects_count
+        finally:
+            self._save_projects_data()
 
     def refresh_project_statuses(self):
-        """Actualiza el estado Git de todos los proyectos configurados."""
-        for project in self._projects:
-            if not project.get('deleted', False): # Solo actualizar si no está marcado como eliminado
-                try:
-                    project['status'] = git_operations.get_repo_status(project['local_path'])
-                    logger.debug(f"Status updated for '{project['name']}'.")
-                except Exception as e:
-                    project['status'] = f"Error: {e}"
-                    logger.error(f"Failed to refresh status for '{project['name']}': {e}")
-        self._save_projects()
-        logger.info("All project statuses refreshed.")
+        """Refreshes the Git status of all tracked projects."""
+        logger.info("Refreshing statuses for all projects...")
+        updated_count = 0
+        for project in self.projects_data:
+            if project.get('deleted', False):
+                continue # No refrescar estado de proyectos eliminados
+            
+            try:
+                if git_is_repo(project['local_path']):
+                    status_output = git_get_status(project['local_path'])
+                    # Aquí puedes parsear status_output para un estado más detallado
+                    # Por simplicidad, si no hay salida, asumimos "Clean"
+                    if status_output.strip() == "":
+                        project['status'] = 'Clean'
+                    else:
+                        project['status'] = 'Modified' # O 'Needs Commit', etc.
+                    current_branch = git_get_current_branch(project['local_path'])
+                    # Actualiza la rama del proyecto en los datos si ha cambiado en disco
+                    if current_branch and current_branch != project['branch']:
+                        project['branch'] = current_branch
+                        project['status'] = f"Modified (Branch: {current_branch})" # Indicar cambio de rama
+                    elif current_branch:
+                        project['status'] = 'Clean' if status_output.strip() == "" else 'Modified'
+                else:
+                    project['status'] = 'Not Found' # Si la carpeta del repo no existe o no es Git
+            except GitOperationError as e:
+                project['status'] = f'Error: {e}'
+                logger.error(f"Failed to get status for '{project['name']}': {e}")
+            
+            updated_count += 1 # Contar los proyectos procesados
+        
+        self._save_projects_data()
+        logger.info(f"Refreshed status for {updated_count} projects.")
+        return updated_count
 
-    def set_base_folder(self, new_base_folder):
-        """Actualiza la carpeta base del ProjectManager."""
-        self._base_folder = new_base_folder
-        self.config_manager.set_base_folder(new_base_folder) # Asegura que la configuración también se actualice
-        logger.info(f"ProjectManager base folder updated to: {new_base_folder}")
+    def scan_base_folder(self):
+        """Escanea la carpeta base en busca de nuevos repositorios Git."""
+        new_projects_found = 0
+        logger.info(f"Scanning base folder '{self.base_folder}' for new Git repositories...")
+        
+        for item_name in os.listdir(self.base_folder):
+            item_path = os.path.normpath(os.path.join(self.base_folder, item_name))
+            if os.path.isdir(item_path) and git_is_repo(item_path):
+                # Verificar si ya está en la lista de proyectos (activos o eliminados)
+                existing_project = self.get_project_by_path(item_path)
+                if not existing_project:
+                    try:
+                        temp_url = ""
+                        _return_code, _stdout, _stderr = git_get_status(item_path, "config", "--get", "remote.origin.url") # git_get_status no es para esto
+                        if _return_code == 0:
+                            temp_url = _stdout.strip()
+                        
+                        current_branch = git_get_current_branch(item_path)
+                        
+                        new_project = {
+                            'name': item_name,
+                            'repo_url': temp_url if temp_url else "Unknown",
+                            'local_path': item_path,
+                            'branch': current_branch,
+                            'status': 'Existing Local', # Nuevo estado para proyectos encontrados localmente
+                            'deleted': False # Asegurarse de que sea un proyecto activo
+                        }
+                        self.projects_data.append(new_project)
+                        new_projects_found += 1
+                        logger.info(f"Found new Git repository: {item_name} at {item_path}")
+                    except Exception as e:
+                        logger.warning(f"Could not read Git info for '{item_name}': {e}. Skipping.")
+                elif existing_project.get('deleted', False):
+                    # Si el proyecto existía pero estaba marcado como borrado, lo reactivamos
+                    logger.info(f"Reactivating previously deleted project found during scan: {item_name}")
+                    existing_project['deleted'] = False
+                    existing_project['status'] = 'Existing Local (Reactivated)'
+                    new_projects_found += 1 # Contar como "nuevo" reactivado
+        
+        if new_projects_found > 0:
+            self._save_projects_data()
+            logger.info(f"Scan complete. Added {new_projects_found} new repositories.")
+        else:
+            logger.info("Scan complete. No new Git repositories found.")
+
+        return new_projects_found

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+env/
+venv/
+.venv/  # ¡Asegúrate de que esta línea esté presente!
+bin/
+include/
+lib/
+lib64/
+pyvenv.cfg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDEs (VS Code)
+.vscode/
+
+# Logs y Bases de Datos
+*.log
+*.sqlite3
+
+# Archivos de configuración y datos de usuario (¡NO DEBEN SUBIRSE!)
+# Esto es importante para tu 'AppData\Roaming'
+*.json
+# Si tienes algún archivo de configuración que NO quieres subir, añádelo aquí.
+# Por ejemplo, si tu proyecto tuviera una base de datos local llamada 'app.db':
+# app.db
