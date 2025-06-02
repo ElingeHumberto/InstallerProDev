@@ -1,92 +1,139 @@
 # installerpro/your_main_app.py
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
 import os
-import sys # Necesario para manipular sys.path
-import threading
-from queue import Queue
+import sys
 import logging
+import json
+import tkinter as tk  # <--- ASEGÚRATE DE QUE ESTA LÍNEA ESTÉ AQUÍ, AL PRINCIPIO
+from tkinter import ttk, filedialog, messagebox
+from PIL import Image, ImageTk  # Asegúrate de tener Pillow instalado (pip install Pillow)
+from git import Repo, GitCommandError  # Asegúrate de tener GitPython instalado (pip install GitPython)
+import platform
 
-# --- GESTIÓN DE SYS.PATH PARA IMPORTACIONES DE PAQUETES ---
-# Obtener el directorio del script actual (ej. C:\Workspace\InstallerProDev\installerpro)
-current_script_dir = os.path.abspath(os.path.dirname(__file__))
+# Para operaciones asíncronas
+from queue import Queue
+import threading
 
-# Obtener el directorio padre, que es la raíz de tu proyecto (ej. C:\Workspace\InstallerProDev)
-project_root_dir = os.path.abspath(os.path.join(current_script_dir, '..'))
+# Asegurarse de que el directorio padre de 'installerpro' esté en sys.path
+# Esto permite que Python encuentre 'installerpro' como un paquete
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# Añadir la raíz del proyecto a sys.path si no está ya presente.
-# Esto permite que Python encuentre el paquete 'installerpro' al importar.
-if project_root_dir not in sys.path:
-    sys.path.insert(0, project_root_dir)
-# --- FIN GESTIÓN DE SYS.PATH ---
+# Importaciones de los módulos de tu propio proyecto (¡AHORA CORRECTAS!)
+from . import i18n  # Importación relativa para i18n.py en la misma carpeta
+from .core.config_manager import ConfigManager  # Importación relativa para core/config_manager.py
+from .core.project_manager import ProjectManager  # Importación relativa para core/project_manager.py
+from .utils.git_operations import GitOperationError, is_git_repository, clone_repository, pull_repository, push_repository, get_repo_status  # Importación directa de funciones desde utils/git_operations.py
+
+# --- Configuración del Logger ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- CONFIGURACIÓN DE RUTAS ---
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+try:
+    import appdirs
+    APP_NAME = "InstallerPro"
+    APP_AUTHOR = "ElingeHumberto"
+    user_config_dir = appdirs.user_config_dir(APP_NAME, APP_AUTHOR)
+    user_data_dir = appdirs.user_data_dir(APP_NAME, APP_AUTHOR)
+except ImportError:
+    logger.warning("appdirs not installed. Falling back to simple user directories. Consider 'pip install appdirs'.")
+    if platform.system() == "Windows":
+        user_config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser("~")), APP_NAME)
+        user_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser("~")), APP_NAME)
+    else:  # Linux/macOS
+        user_config_dir = os.path.join(os.path.expanduser("~"), f".config/{APP_NAME}")
+        user_data_dir = os.path.join(os.path.expanduser("~"), f".local/share/{APP_NAME}")
+
+os.makedirs(user_config_dir, exist_ok=True)
+os.makedirs(user_data_dir, exist_ok=True)
+
+config_file_path = os.path.join(user_config_dir, "config.json")
+projects_file_path = os.path.join(user_data_dir, "projects.json")
+
+# --- Cargar/Crear Configuración y Proyectos ---
+app_config = {"language": "en", "base_folder": ""}
+if os.path.exists(config_file_path):
+    try:
+        with open(config_file_path, 'r', encoding='utf-8') as f:
+            app_config = json.load(f)
+        logger.info(f"Configuration loaded from: {config_file_path}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding config.json: {e}. Using default configuration.")
+        app_config = {"language": "en", "base_folder": ""}
+else:
+    logger.info(f"Config file not found. Creating default: {config_file_path}")
+    with open(config_file_path, 'w', encoding='utf-8') as f:
+        json.dump(app_config, f, indent=4)
+
+project_data = []
+if os.path.exists(projects_file_path):
+    try:
+        with open(projects_file_path, 'r', encoding='utf-8') as f:
+            project_data = json.load(f)
+        logger.info(f"Loaded {len(project_data)} projects into treeview.")
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding projects.json: {e}. Starting with empty project list.")
+        project_data = []
+else:
+    logger.info(f"Projects file not found. Creating default: {projects_file_path}")
+    with open(projects_file_path, 'w', encoding='utf-8') as f:
+        json.dump(project_data, f, indent=4)
 
 
-# Importa tus módulos personalizados
-import installerpro.core.logging_config as logging_config
-import installerpro.i18n as i18n
-from installerpro.core.config_manager import ConfigManager
-from installerpro.core.git_operations import GitOperationError
-from installerpro.core.project_manager import ProjectManager, ProjectNotFoundError
+# --- INICIALIZACIÓN DE INTERNACIONALIZACIÓN (i18n) ---
+locales_path = os.path.join(base_dir, 'utils', 'locales')
 
-# NOTA IMPORTANTE: La clase AddProjectDialog ahora está definida al final de este mismo archivo.
-# Por lo tanto, NO NECESITAS importar AddProjectDialog desde otro archivo aquí.
+i18n.set_locales_dir(locales_path)
 
-# Configura el logging al inicio de la aplicación
-logger = logging_config.setup_logging()
+initial_language = app_config.get("language", "es")
+i18n.set_language(initial_language, locales_path)
 
-# Variable global para la función de traducción, para conveniencia en toda la aplicación
-# Se asigna directamente aquí para que esté disponible globalmente si otros módulos la necesitan.
 _ = i18n.t
 
 class InstallerProApp:
     def __init__(self, master):
         self.master = master
-        self.logger = logging.getLogger(__name__) # Logger específico para esta instancia de la aplicación
+        self.logger = logging.getLogger(__name__)
 
-        self.master.withdraw() # Oculta la ventana principal hasta que todo esté listo
+        self.master.withdraw()
 
-        # MUEVE LA ASIGNACIÓN DE self.t AQUÍ, ANTES DE SU PRIMER USO
-        self.t = i18n.t # ¡Esto es lo que debes mover!
+        self.t = i18n.t
 
         # 1. Inicializar el gestor de configuración
-        # La configuración se carga automáticamente en el constructor de ConfigManager
         self.config_manager = ConfigManager()
 
-        # Obtener la carpeta base y asegurar su existencia
         initial_base_folder = os.path.abspath(self.config_manager.get_base_folder())
-        os.makedirs(initial_base_folder, exist_ok=True) # Asegura que la carpeta base exista
-        self.logger.info(self.t("Base folder created: {folder}", folder=initial_base_folder)) # Ahora self.t EXISTE aquí
+        os.makedirs(initial_base_folder, exist_ok=True)
+        self.logger.info(self.t("Base folder created: {folder}", folder=initial_base_folder))
 
         # 2. Inicializar el ProjectManager
-        self.project_manager = ProjectManager(initial_base_folder, config_manager=self.config_manager)
-        # Carga los proyectos al inicio del ProjectManager (ya se hace en su constructor)
-        # self.project_manager._load_projects() # Ya se llama en el constructor de ProjectManager
-
+        self.project_manager = ProjectManager(
+            initial_base_folder,
+            config_manager=self.config_manager,
+            projects_file_path=projects_file_path  # <--- ¡Añadimos esta línea!
+        )
         # 3. Configurar el traductor (i18n) y establecer el idioma inicial
-        # La función de traducción global '_' ya está asignada arriba.
-        # Ahora solo necesitas establecer el idioma inicial, self.t ya está asignado
         initial_lang_code = self.config_manager.get_language() or i18n.get_current_language()
-        if not i18n.set_language(initial_lang_code): # Esto cargará las traducciones
+        if not i18n.set_language(initial_lang_code):
             self.logger.warning(f"Could not set initial language to {initial_lang_code}. Defaulting to 'en'.")
-            i18n.set_language("en") # Fallback a inglés si el idioma inicial falla
+            i18n.set_language("en")
 
-        # Cola para comunicación entre hilos (para operaciones asíncronas)
         self.task_queue = Queue()
 
         # 4. Configurar y mostrar UI
-        self._setup_ui() # Configura todos los widgets de la interfaz
-        self.update_ui_texts() # Actualiza los textos de todos los widgets con el idioma actual
-        self._load_projects_into_treeview() # Carga los proyectos en el Treeview
+        self._setup_ui()
+        self.update_ui_texts()
+        self._load_projects_into_treeview()
 
-        # Iniciar el procesamiento de la cola de tareas
         self.master.after(100, self._process_task_queue)
 
         self.logger.info(self.t("App Title") + self.t(" started."))
-        self.master.deiconify() # Muestra la ventana principal una vez que todo esté listo
-
+        self.master.deiconify()
 
     def _setup_ui(self):
-        """Configura los elementos estáticos de la interfaz de usuario."""
         self.main_frame = ttk.Frame(self.master, padding="10")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -100,7 +147,6 @@ class InstallerProApp:
         self.view_menu.add_cascade(menu=self.lang_menu, label=self.t("Language Menu"))
         self._populate_language_menu()
 
-        # Configuración del Treeview
         self.tree = ttk.Treeview(self.main_frame, columns=("name", "path", "url", "branch", "status"), show="headings")
         self.tree.heading("name", text=self.t("Project Name Column"))
         self.tree.heading("path", text=self.t("Local Path Column"))
@@ -145,10 +191,8 @@ class InstallerProApp:
         self.update_base_folder_label()
 
     def _populate_language_menu(self):
-        """Popula el menú de idiomas con las opciones disponibles y maneja la selección única."""
-        self.lang_menu.delete(0, tk.END) # Limpia el menú actual
+        self.lang_menu.delete(0, tk.END)
 
-        # Crea UNA StringVar para que todos los radio buttons compartan
         if not hasattr(self, 'selected_language_var'):
             self.selected_language_var = tk.StringVar()
 
@@ -157,21 +201,19 @@ class InstallerProApp:
         for lang_code in available_lang_codes:
             lang_name_key = f"language_option.{lang_code}"
             display_name = self.t(lang_name_key, lang=lang_code)
-            if display_name == lang_name_key: # Fallback si no hay traducción
+            if display_name == lang_name_key:
                 display_name = lang_code.upper()
 
             self.lang_menu.add_radiobutton(
                 label=display_name,
                 command=lambda lc=lang_code: self.change_language(lc),
-                variable=self.selected_language_var, # Todos los radio buttons comparten esta variable
-                value=lang_code # El valor que esta variable tomará si este botón es seleccionado
+                variable=self.selected_language_var,
+                value=lang_code
             )
 
-        # Establece el valor inicial de la variable compartida al idioma actual
         self.selected_language_var.set(i18n.get_current_language())
 
     def update_ui_texts(self):
-        """Actualiza todos los textos de la interfaz de usuario en el idioma actual."""
         self.master.title(self.t("App Title"))
 
         try:
@@ -187,7 +229,6 @@ class InstallerProApp:
 
         except Exception as e:
             self.logger.error(f"Error updating menu texts: {e}")
-            # print(f"DEBUG: Tipo de excepción: {type(e).__name__}, Mensaje: '{e}'") # Comentado para limpiar la salida
 
         self.tree.heading("name", text=self.t("Project Name Column"))
         self.tree.heading("path", text=self.t("Local Path Column"))
@@ -208,7 +249,6 @@ class InstallerProApp:
         self.logger.info("UI texts updated successfully.")
 
     def _process_task_queue(self):
-        """Procesa elementos de la cola de tareas."""
         try:
             while not self.task_queue.empty():
                 callback, args, kwargs = self.task_queue.get_nowait()
@@ -221,19 +261,16 @@ class InstallerProApp:
             self.master.after(100, self._process_task_queue)
 
     def update_base_folder_label(self):
-        """Actualiza la etiqueta que muestra la carpeta base actual."""
         current_base_folder = self.config_manager.get_base_folder()
         label_text = self.t("Base folder created: {path}", path=current_base_folder)
         self.base_folder_label.config(text=label_text)
 
-
     def change_language(self, lang_code):
-        """Cambia el idioma de la aplicación."""
         old_lang = i18n.get_current_language()
-        if self.config_manager.set_language(lang_code): # Guarda la preferencia de idioma
-            i18n.set_language(lang_code) # Cambia el idioma en el traductor
+        if self.config_manager.set_language(lang_code):
+            i18n.set_language(lang_code)
             self.update_ui_texts()
-            self.selected_language_var.set(lang_code) # Actualizar la StringVar compartida
+            self.selected_language_var.set(lang_code)
             messagebox.showinfo(
                 self.t("Language Changed"),
                 self.t("Application language changed to: {lang}", lang=i18n.t(f"language_option.{lang_code}", lang=lang_code))
@@ -246,9 +283,7 @@ class InstallerProApp:
             )
             self.logger.error(f"Failed to change language to {lang_code}.")
 
-
     def _load_projects_into_treeview(self):
-        """Carga los proyectos desde el ProjectManager al Treeview."""
         for item in self.tree.get_children():
             self.tree.delete(item)
 
@@ -261,7 +296,7 @@ class InstallerProApp:
             return
 
         for project in projects:
-            status_display = self.t(project.get('status', 'Unknown Status Value')) # Traduce el estado
+            status_display = self.t(project.get('status', 'Unknown Status Value'))
             self.tree.insert("", tk.END,
                                 values=(project['name'], project['local_path'], project['repo_url'], project['branch'], status_display),
                                 tags=("deleted" if project.get('deleted') else "normal",))
@@ -279,16 +314,10 @@ class InstallerProApp:
             return None
         return self.tree.item(selected_item, 'values')[1]
 
-
-    def _process_queue(self): # Esta función ya no se usa, la reemplaza _process_task_queue
-        """Procesa los resultados de las tareas de los hilos de fondo."""
+    def _process_queue(self):
         pass
 
     def _run_async_task(self, target_function, *args, callback_on_success=None, callback_on_failure=None, **kwargs):
-        """
-        Ejecuta una función en un hilo separado y maneja los resultados/errores.
-        Los args y kwargs son para la target_function.
-        """
         def task_wrapper():
             try:
                 result = target_function(*args, **kwargs)
@@ -302,9 +331,8 @@ class InstallerProApp:
         thread.daemon = True
         thread.start()
 
-    # Métodos de acción de la UI
     def _add_project(self):
-        dialog = AddProjectDialog(self, t_func=self.t, base_folder=self.config_manager.get_base_folder()) # Pasar self.t
+        dialog = AddProjectDialog(self.master, t_func=self.t, base_folder=self.config_manager.get_base_folder())
         if dialog.exec_():
             name = dialog.result['name']
             repo_url = dialog.result['repo_url']
@@ -318,7 +346,7 @@ class InstallerProApp:
             self.logger.info(f"Starting async add project for '{name}'...")
             self._run_async_task(
                 self.project_manager.add_project,
-                name, repo_url, local_path_full, branch, # Posicionales ANTES de keyword arguments
+                name, repo_url, local_path_full, branch,
                 callback_on_success=self._on_project_added_success,
                 callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Adding Project"))
             )
@@ -549,10 +577,11 @@ class InstallerProApp:
 
 
 # --- CLASE ADDPROJECTDIALOG (AHORA AUTOCONTENIDA EN ESTE ARCHIVO) ---
+# Esta clase DEBE estar DEPUÉS de 'import tkinter as tk' para que 'tk' esté definido.
+# Su posición actual (donde me la enviaste) es CORRECTA para resolver el NameError.
 class AddProjectDialog(tk.Toplevel):
     def __init__(self, parent, t_func, base_folder):
         super().__init__(parent)
-        self.parent = parent
         self.t = t_func
         self.base_folder = base_folder
         self.transient(parent)
@@ -602,10 +631,9 @@ class AddProjectDialog(tk.Toplevel):
             self.local_path_var.set(os.path.join(self.base_folder, self.t("New Project Default Name")))
 
     def _browse_local_path(self):
-        suggested_path = self.local_path_var.get() if self.local_path_var.get() else self.base_folder
         folder_selected = filedialog.askdirectory(
             parent=self,
-            initialdir=suggested_path,
+            initialdir=self.base_folder,
             title=self.t("Select Local Path Title")
         )
         if folder_selected:
@@ -613,19 +641,19 @@ class AddProjectDialog(tk.Toplevel):
 
     def _on_ok(self):
         name = self.name_entry.get().strip()
-        repo_url = self.repo_url_entry.get().strip()
         local_path_full = self.local_path_var.get().strip()
+        repo_url = self.repo_url_entry.get().strip()
         branch = self.branch_entry.get().strip()
 
-        if not name or not repo_url or not local_path_full:
-            messagebox.showerror(self.t("Input Error"), self.t("All fields except branch are required."))
+        if not name or not local_path_full or not repo_url:
+            messagebox.showerror(self.t("Input Error"), self.t("Please fill in all required fields: Name, Local Path, Repository URL."))
             return
 
         self.result = {
             'name': name,
-            'repo_url': repo_url,
             'local_path_full': local_path_full,
-            'branch': branch if branch else 'main'
+            'repo_url': repo_url,
+            'branch': branch if branch else 'main'  # Default to 'main' if no branch specified
         }
         self.destroy()
 
@@ -633,24 +661,20 @@ class AddProjectDialog(tk.Toplevel):
         self.result = None
         self.destroy()
 
-    def _center_window(self):
-        self.update_idletasks()
-        x = self.parent.winfo_x() + (self.parent.winfo_width() / 2) - (self.winfo_width() / 2)
-        y = self.parent.winfo_y() + (self.parent.winfo_height() / 2) - (self.winfo_height() / 2)
-        self.geometry(f"+{int(x)}+{int(y)}")
-
     def exec_(self):
-        """Bloquea hasta que el diálogo se cierra y devuelve el resultado."""
         self.parent.wait_window(self)
         return self.result
 
+    def _center_window(self):
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = self.parent.winfo_x() + (self.parent.winfo_width() // 2) - (width // 2)
+        y = self.parent.winfo_y() + (self.parent.winfo_height() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
 
-# --- PUNTO DE ENTRADA PRINCIPAL ---
+
 if __name__ == "__main__":
-    try:
-        root = tk.Tk()
-        app = InstallerProApp(root) # Pasar 'root' al constructor
-        app.run() # Iniciar el bucle principal de Tkinter
-    except Exception as e:
-        logger.critical(f"Unhandled exception during application startup: {e}", exc_info=True)
-        messagebox.showerror("Error de Inicio Crítico", f"Un error crítico ocurrió durante el inicio de la aplicación: {e}")
+    root = tk.Tk()
+    app = InstallerProApp(root)
+    app.run()
