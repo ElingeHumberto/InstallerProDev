@@ -3,27 +3,24 @@ import os
 import sys
 import logging
 import json
-import tkinter as tk  # <--- ASEGÚRATE DE QUE ESTA LÍNEA ESTÉ AQUÍ, AL PRINCIPIO
-from tkinter import ttk, filedialog, messagebox
-from PIL import Image, ImageTk  # Asegúrate de tener Pillow instalado (pip install Pillow)
-from git import Repo, GitCommandError  # Asegúrate de tener GitPython instalado (pip install GitPython)
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox, scrolledtext
+from PIL import Image, ImageTk
+from git import Repo, GitCommandError
 import platform
-
-# Para operaciones asíncronas
-from queue import Queue
+from queue import Queue, Empty
 import threading
 
 # Asegurarse de que el directorio padre de 'installerpro' esté en sys.path
-# Esto permite que Python encuentre 'installerpro' como un paquete
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Importaciones de los módulos de tu propio proyecto (¡AHORA CORRECTAS!)
-from . import i18n  # Importación relativa para i18n.py en la misma carpeta
-from .core.config_manager import ConfigManager  # Importación relativa para core/config_manager.py
-from .core.project_manager import ProjectManager  # Importación relativa para core/project_manager.py
-from .utils.git_operations import GitOperationError, is_git_repository, clone_repository, pull_repository, push_repository, get_repo_status  # Importación directa de funciones desde utils/git_operations.py
+# Importaciones de los módulos de tu propio proyecto
+from . import i18n
+from .core.config_manager import ConfigManager
+from .core.project_manager import ProjectManager, ProjectNotFoundError
+from .utils.git_operations import GitOperationError, is_git_repository, clone_repository, pull_repository, push_repository, get_repo_status
 
 # --- Configuración del Logger ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s - %(levelname)s - %(message)s')
@@ -89,10 +86,181 @@ locales_path = os.path.join(base_dir, 'utils', 'locales')
 i18n.set_locales_dir(locales_path)
 
 initial_language = app_config.get("language", "es")
-i18n.set_language(initial_language, locales_path)
+i18n.set_language(initial_language) # <--- ¡CAMBIO CLAVE AQUÍ!
 
 _ = i18n.t
 
+# --- CLASE TOOLTIP ---
+class Tooltip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        self.id = None
+        self.x = 0
+        self.y = 0
+        self.widget.bind("<Enter>", self.enter)
+        self.widget.bind("<Leave>", self.leave)
+        self.widget.bind("<ButtonPress>", self.leave)
+
+    def enter(self, event=None):
+        self.schedule()
+
+    def leave(self, event=None):
+        self.unschedule()
+        self.hide()
+
+    def schedule(self):
+        self.unschedule()
+        self.id = self.widget.after(500, self.show)
+
+    def unschedule(self):
+        if self.id:
+            self.widget.after_cancel(self.id)
+            self.id = None
+
+    def show(self):
+        if self.tooltip_window or not self.text:
+            return
+
+        x, y, _, _ = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + self.widget.winfo_height() + 2
+
+        self.tooltip_window = tk.Toplevel(self.widget)
+        self.tooltip_window.wm_overrideredirect(True)
+        self.tooltip_window.wm_geometry(f"+{x}+{y}")
+
+        label = tk.Label(self.tooltip_window, text=self.text, background="#FFFFEA", relief="solid", borderwidth=1,
+                         font=("tahoma", "8", "normal"))
+        label.pack(padx=1, pady=1)
+
+    def hide(self):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
+# --- CLASE ADDPROJECTDIALOG ---
+class AddProjectDialog(tk.Toplevel):
+    def __init__(self, master_window, t_func, base_folder):
+        super().__init__(master_window)
+
+        self.master_window = master_window
+        self.t = t_func
+        self.base_folder = base_folder
+
+        self.title(self.t("Add Project Title"))
+
+        self.transient(self.master_window)
+        self.grab_set()
+
+        self._create_widgets()
+        self._center_window()
+
+        self.name_entry.focus_set()
+        self.result = None
+
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.name_entry.bind("<KeyRelease>", self._update_local_path_on_name_change)
+
+    def _create_widgets(self):
+        frame = ttk.Frame(self, padding="10")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        name_label = ttk.Label(frame, text=self.t("Project Name"))
+        name_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.name_entry = ttk.Entry(frame, width=40)
+        self.name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        Tooltip(name_label, self.t("tooltip.project_name_label"))
+        Tooltip(self.name_entry, self.t("tooltip.project_name_entry"))
+
+        local_path_label = ttk.Label(frame, text=self.t("Local Path Label"))
+        local_path_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.local_path_var = tk.StringVar()
+        self.local_path_entry = ttk.Entry(frame, textvariable=self.local_path_var, width=40)
+        self.local_path_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        Tooltip(local_path_label, self.t("tooltip.local_path_label"))
+        Tooltip(self.local_path_entry, self.t("tooltip.local_path_entry"))
+
+        browse_button = ttk.Button(frame, text=self.t("Browse Button"), command=self._browse_local_path)
+        browse_button.grid(row=1, column=2, padx=5, pady=5)
+        Tooltip(browse_button, self.t("tooltip.browse_button"))
+
+        self.local_path_var.set(os.path.join(self.base_folder, self.name_entry.get() or self.t("New Project Default Name")))
+
+
+        repo_url_label = ttk.Label(frame, text=self.t("Repository URL Label"))
+        repo_url_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.repo_url_entry = ttk.Entry(frame, width=40)
+        self.repo_url_entry.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
+        Tooltip(repo_url_label, self.t("tooltip.repo_url_label"))
+        Tooltip(self.repo_url_entry, self.t("tooltip.repo_url_entry"))
+
+        branch_label = ttk.Label(frame, text=self.t("Branch Optional Label"))
+        branch_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        self.branch_entry = ttk.Entry(frame, width=40)
+        self.branch_entry.grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
+        Tooltip(branch_label, self.t("tooltip.branch_label"))
+        Tooltip(self.branch_entry, self.t("tooltip.branch_entry"))
+
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=4, column=0, columnspan=3, pady=10)
+
+        ttk.Button(button_frame, text=self.t("Add Button"), command=self._on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.t("Cancel Button"), command=self._on_cancel).pack(side=tk.LEFT, padx=5)
+
+    def _update_local_path_on_name_change(self, event=None):
+        project_name = self.name_entry.get().strip()
+        if project_name:
+            self.local_path_var.set(os.path.join(self.base_folder, project_name))
+        else:
+            self.local_path_var.set(os.path.join(self.base_folder, self.t("New Project Default Name")))
+
+    def _browse_local_path(self):
+        folder_selected = filedialog.askdirectory(
+            parent=self,
+            initialdir=self.base_folder,
+            title=self.t("Select Local Path Title")
+        )
+        if folder_selected:
+            self.local_path_var.set(folder_selected)
+
+    def _on_ok(self):
+        name = self.name_entry.get().strip()
+        local_path_full = self.local_path_var.get().strip()
+        repo_url = self.repo_url_entry.get().strip()
+        branch = self.branch_entry.get().strip()
+
+        if not name or not local_path_full or not repo_url:
+            messagebox.showerror(self.t("Input Error"), self.t("Please fill in all required fields: Name, Local Path, Repository URL."))
+            return
+
+        self.result = {
+            'name': name,
+            'local_path_full': local_path_full,
+            'repo_url': repo_url,
+            'branch': branch if branch else 'main'
+        }
+        self.destroy()
+
+    def _on_cancel(self):
+        self.result = None
+        self.destroy()
+
+    def exec_(self):
+        self.master_window.wait_window(self)
+        return self.result
+
+    def _center_window(self):
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = self.master_window.winfo_x() + (self.master_window.winfo_width() // 2) - (width // 2)
+        y = self.master_window.winfo_y() + (self.master_window.winfo_height() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+
+
+# --- CLASE INSTALLERPROAPP (AHORA CORRECTAMENTE DEFINIDA) ---
 class InstallerProApp:
     def __init__(self, master):
         self.master = master
@@ -103,7 +271,7 @@ class InstallerProApp:
         self.t = i18n.t
 
         # 1. Inicializar el gestor de configuración
-        self.config_manager = ConfigManager()
+        self.config_manager = ConfigManager(config_file_path, app_config)
 
         initial_base_folder = os.path.abspath(self.config_manager.get_base_folder())
         os.makedirs(initial_base_folder, exist_ok=True)
@@ -111,14 +279,15 @@ class InstallerProApp:
 
         # 2. Inicializar el ProjectManager
         self.project_manager = ProjectManager(
-            initial_base_folder,
+            base_folder=initial_base_folder,
             config_manager=self.config_manager,
-            projects_file_path=projects_file_path  # <--- ¡Añadimos esta línea!
+            projects_file_path=projects_file_path
         )
+
         # 3. Configurar el traductor (i18n) y establecer el idioma inicial
         initial_lang_code = self.config_manager.get_language() or i18n.get_current_language()
         if not i18n.set_language(initial_lang_code):
-            self.logger.warning(f"Could not set initial language to {initial_lang_code}. Defaulting to 'en'.")
+            self.logger.warning(self.t("Could not set initial language to {lang}. Defaulting to 'en'.", lang=initial_lang_code))
             i18n.set_language("en")
 
         self.task_queue = Queue()
@@ -387,7 +556,7 @@ class InstallerProApp:
                 self._run_async_task(
                     self.project_manager.remove_project,
                     selected_path, permanent=True,
-                    callback_on_success=lambda _: self._on_project_physically_removed_success(project.get('name', 'Unnamed Project')),
+                    callback_on_success=lambda _: self._on_project_physically_removed_removed_success(project.get('name', 'Unnamed Project')),
                     callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Physical Removing Project"))
                 )
         else:
@@ -574,104 +743,6 @@ class InstallerProApp:
 
     def run(self):
         self.master.mainloop()
-
-
-# --- CLASE ADDPROJECTDIALOG (AHORA AUTOCONTENIDA EN ESTE ARCHIVO) ---
-# Esta clase DEBE estar DEPUÉS de 'import tkinter as tk' para que 'tk' esté definido.
-# Su posición actual (donde me la enviaste) es CORRECTA para resolver el NameError.
-class AddProjectDialog(tk.Toplevel):
-    def __init__(self, parent, t_func, base_folder):
-        super().__init__(parent)
-        self.t = t_func
-        self.base_folder = base_folder
-        self.transient(parent)
-        self.grab_set()
-        self.title(self.t("Add Project Title"))
-        self.result = None
-
-        self._create_widgets()
-        self._center_window()
-        self.protocol("WM_DELETE_WINDOW", self._on_cancel)
-
-    def _create_widgets(self):
-        frame = ttk.Frame(self, padding="10")
-        frame.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(frame, text=self.t("Project Name")).grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.name_entry = ttk.Entry(frame, width=40)
-        self.name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-        self.local_path_var = tk.StringVar()
-        ttk.Label(frame, text=self.t("Local Path Label")).grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.local_path_entry = ttk.Entry(frame, textvariable=self.local_path_var, width=40)
-        self.local_path_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        ttk.Button(frame, text=self.t("Browse Button"), command=self._browse_local_path).grid(row=1, column=2, padx=5, pady=5)
-        self.local_path_var.set(os.path.join(self.base_folder, self.name_entry.get() or self.t("New Project Default Name")))
-        self.name_entry.bind("<KeyRelease>", self._update_local_path_on_name_change)
-
-        ttk.Label(frame, text=self.t("Repository URL Label")).grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        self.repo_url_entry = ttk.Entry(frame, width=40)
-        self.repo_url_entry.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
-
-        ttk.Label(frame, text=self.t("Branch Optional Label")).grid(row=3, column=0, padx=5, pady=5, sticky="w")
-        self.branch_entry = ttk.Entry(frame, width=40)
-        self.branch_entry.grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
-
-        button_frame = ttk.Frame(frame)
-        button_frame.grid(row=4, column=0, columnspan=3, pady=10)
-
-        ttk.Button(button_frame, text=self.t("Add Button"), command=self._on_ok).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text=self.t("Cancel Button"), command=self._on_cancel).pack(side=tk.LEFT, padx=5)
-
-    def _update_local_path_on_name_change(self, event=None):
-        project_name = self.name_entry.get().strip()
-        if project_name:
-            self.local_path_var.set(os.path.join(self.base_folder, project_name))
-        else:
-            self.local_path_var.set(os.path.join(self.base_folder, self.t("New Project Default Name")))
-
-    def _browse_local_path(self):
-        folder_selected = filedialog.askdirectory(
-            parent=self,
-            initialdir=self.base_folder,
-            title=self.t("Select Local Path Title")
-        )
-        if folder_selected:
-            self.local_path_var.set(folder_selected)
-
-    def _on_ok(self):
-        name = self.name_entry.get().strip()
-        local_path_full = self.local_path_var.get().strip()
-        repo_url = self.repo_url_entry.get().strip()
-        branch = self.branch_entry.get().strip()
-
-        if not name or not local_path_full or not repo_url:
-            messagebox.showerror(self.t("Input Error"), self.t("Please fill in all required fields: Name, Local Path, Repository URL."))
-            return
-
-        self.result = {
-            'name': name,
-            'local_path_full': local_path_full,
-            'repo_url': repo_url,
-            'branch': branch if branch else 'main'  # Default to 'main' if no branch specified
-        }
-        self.destroy()
-
-    def _on_cancel(self):
-        self.result = None
-        self.destroy()
-
-    def exec_(self):
-        self.parent.wait_window(self)
-        return self.result
-
-    def _center_window(self):
-        self.update_idletasks()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = self.parent.winfo_x() + (self.parent.winfo_width() // 2) - (width // 2)
-        y = self.parent.winfo_y() + (self.parent.winfo_height() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
 
 
 if __name__ == "__main__":

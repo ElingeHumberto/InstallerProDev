@@ -1,116 +1,146 @@
 # installerpro/i18n.py
-import os
 import json
+import os
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Variables globales para el estado de la internacionalización
+_current_language = "en"
 _translations = {}
-_current_language = 'en' # Idioma predeterminado
-_default_language = 'en' # Idioma de fallback si no se encuentra el actual
-_locales_dir = None # Directorio donde se encuentran los archivos .json de traducción
+_default_language = "en"
+_locales_dir = None # Esta variable debe ser establecida por la aplicación principal
 
-
-def load_translations(lang_code, locales_dir):
-    """Carga las traducciones para un código de idioma específico."""
+def _load_translations(lang_code):
+    """
+    Carga las traducciones para un código de idioma específico en la variable global _translations.
+    Asume que _locales_dir ya ha sido establecido.
+    """
     global _translations
-    lang_file = os.path.normpath(os.path.join(locales_dir, f'{lang_code}.json'))
-
-    logger.debug(f"Attempting to load translations from: {lang_file}") 
-
-    if not os.path.exists(locales_dir): 
-        logger.error(f"Translation directory not found: {locales_dir}. Translations will not be loaded.")
+    
+    if not _locales_dir or not os.path.exists(_locales_dir):
+        logger.error(f"Translation directory not set or does not exist: {_locales_dir}. Cannot load translations.")
         _translations = {}
-        return
+        return False # Fallo al cargar
 
-    if not os.path.exists(lang_file): 
-        logger.warning(f"Language file '{lang_file}' not found. Falling back to default: '{_default_language}'.")
-        if lang_code != _default_language:
-            load_translations(_default_language, locales_dir) # Intentar cargar el idioma predeterminado
-            return
+    lang_file = os.path.normpath(os.path.join(_locales_dir, f'{lang_code}.json'))
+    
+    logger.debug(f"Attempting to load translations from: {lang_file}")
+
+    if not os.path.exists(lang_file):
+        logger.warning(f"Language file '{lang_file}' not found.")
+        _translations = {} # Limpiar traducciones si el archivo no existe
+        return False # Fallo al cargar
 
     try:
         with open(lang_file, 'r', encoding='utf-8') as f:
             _translations = json.load(f)
         logger.info(f"Translations loaded for '{lang_code}' from '{lang_file}'.")
+        return True # Éxito al cargar
     except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON from {lang_file}. Invalid format. Falling back to default language. Error: {e}")
+        logger.error(f"Error decoding JSON from {lang_file}. Invalid format. Error: {e}")
         _translations = {}
-        if lang_code != _default_language:
-            set_language(_default_language, locales_dir) # Volver a establecer para cargar default
+        return False # Fallo al cargar
     except Exception as e:
         logger.error(f"An unexpected error occurred loading translation from {lang_file}: {e}")
         _translations = {}
-        if lang_code != _default_language:
-            set_language(_default_language, locales_dir) # Volver a establecer para cargar default
+        return False # Fallo al cargar
 
 def t(key, **kwargs):
-    """Traduce una clave dada, con interpolación de variables opcional.
-    Usa la traducción cargada para el idioma actual.
     """
-    global _translations
-
+    Traduce una clave dada, con interpolación de variables opcional.
+    Usa la traducción cargada para el idioma actual (_translations).
+    """
     # Si no hay traducciones cargadas, o la clave no existe, devolver la clave sin traducir.
-    # Esto asegura que siempre haya un valor de retorno.
     if not _translations or key not in _translations:
         return key
+    
+    translated_text = _translations.get(key, key)
 
-    translated_text = _translations.get(key, key) # Si no la encuentra, devuelve la clave
-
-    # Si hay argumentos adicionales, hacer la interpolación
     if kwargs:
         try:
-            # Usa f-strings para la interpolación si todas las claves son válidas en la cadena
-            # Esto es más flexible que .format() si las claves no son siempre positional
             return translated_text.format(**kwargs)
         except KeyError as e:
-            logger.error(f"Missing placeholder in translation for key '{key}'. Error: {e}")
-            return translated_text # Devuelve el texto sin interpolar si hay un error
-        except IndexError as e:
-            logger.error(f"Positional placeholder error in translation for key '{key}'. Error: {e}")
-            return translated_text # Devuelve el texto sin interpolar si hay un error
+            logger.error(f"Missing placeholder '{e}' in translation for key '{key}' (lang: {_current_language}). Original: '{translated_text}'")
+            return translated_text
         except Exception as e:
-            logger.error(f"An unexpected error occurred formatting translation for key '{key}': {e}")
-            return translated_text # Fallback general si ocurre otro error de formato
-
-    return translated_text # Si no hay kwargs, devuelve el texto traducido directamente
+            logger.error(f"Error formatting translation for key '{key}' (lang: {_current_language}): {e}. Original: '{translated_text}'")
+            return translated_text
+    return translated_text
 
 def get_available_languages():
-    """Retorna una lista de códigos de idioma disponibles."""
-    if _locales_dir and os.path.exists(_locales_dir):
-        return [f.replace('.json', '') for f in os.listdir(_locales_dir) if f.endswith('.json')]
-    return [_default_language]
+    """
+    Retorna una lista de códigos de idioma disponibles basándose en los archivos .json en _locales_dir.
+    """
+    if not _locales_dir or not os.path.exists(_locales_dir):
+        logger.warning(f"Locales directory not set or does not exist: {_locales_dir}. Cannot get available languages.")
+        return [_default_language] # Fallback a solo el idioma por defecto
 
-def set_language(lang_code, locales_dir=None):
-    """Establece el idioma actual y carga sus traducciones.
-    Si locales_dir no se proporciona, usa el _locales_dir previamente establecido.
+    available_langs = []
+    try:
+        for f_name in os.listdir(_locales_dir):
+            if f_name.endswith('.json'):
+                lang_code = f_name[:-5]
+                # Opcional: Validar JSON antes de añadirlo a la lista de disponibles
+                try:
+                    with open(os.path.join(_locales_dir, f_name), 'r', encoding='utf-8') as f:
+                        json.load(f) # Intentar cargar para validar
+                    available_langs.append(lang_code)
+                except json.JSONDecodeError:
+                    logger.warning(f"Skipping malformed translation file: {f_name}")
+                except Exception as e:
+                    logger.warning(f"Error reading translation file {f_name} during scan: {e}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while listing available languages in {_locales_dir}: {e}")
+
+    if _default_language not in available_langs:
+        available_langs.append(_default_language) # Asegurarse de que el idioma por defecto esté siempre disponible
+    
+    return sorted(list(set(available_langs)))
+
+def set_language(lang_code):
+    """
+    Establece el idioma actual de la aplicación y recarga las traducciones.
+    Esta función es llamada por la aplicación principal.
     """
     global _current_language
+    
+    # Si el directorio de locales no está establecido, no podemos cargar nada
+    if not _locales_dir or not os.path.exists(_locales_dir):
+        logger.error(f"Locales directory not set or does not exist: {_locales_dir}. Cannot set language.")
+        _current_language = _default_language # Forzar a default si no hay locales
+        _translations.clear() # Limpiar traducciones
+        return False # Falló
 
-    # Si se proporciona un nuevo locales_dir, actualiza la variable global.
-    if locales_dir:
-        set_locales_dir(locales_dir)
-
-    if _locales_dir: # Procede solo si _locales_dir está definido
-        if lang_code in get_available_languages():
-            _current_language = lang_code
-            load_translations(lang_code, _locales_dir)
-            logger.info(f"Language set to: {_current_language}")
+    # Verificar si el idioma solicitado está disponible
+    if lang_code not in get_available_languages():
+        logger.warning(f"Attempted to set unsupported language: '{lang_code}'. Falling back to default: '{_default_language}'.")
+        lang_code = _default_language # Usar el idioma por defecto si el solicitado no está disponible
+    
+    # Solo recargar si el idioma es diferente o si las traducciones no están cargadas
+    if _current_language != lang_code or not _translations:
+        _current_language = lang_code
+        if _load_translations(lang_code): # Intentar cargar las traducciones
+            logger.info(f"Application language set to: {_current_language}.")
+            return True # Idioma cambiado/cargado con éxito
         else:
-            logger.warning(f"Language '{lang_code}' not available. Keeping current language: {_current_language}. Available: {get_available_languages()}")
-            # Intentar cargar el idioma predeterminado si el solicitado no está disponible
-            if _current_language != _default_language: # Previene loop infinito
-                set_language(_default_language, _locales_dir)
-    else:
-        logger.error("Locales directory not set. Cannot set language.")
-
+            logger.error(f"Failed to load translations for '{lang_code}'. Falling back to default.")
+            _current_language = _default_language # Forzar a default si la carga falla
+            _translations.clear() # Limpiar traducciones
+            return False # Falló la carga
+    
+    logger.debug(f"Language already set to {lang_code}. No reload needed.")
+    return False # No hubo cambio efectivo o ya estaba cargado
 
 def get_current_language():
     """Retorna el código del idioma actual."""
     return _current_language
 
 def set_locales_dir(path):
-    """Establece el directorio de locales donde se encuentran los archivos de traducción."""
+    """
+    Establece el directorio de locales donde se encuentran los archivos de traducción.
+    Esta función debe ser llamada por la aplicación principal al inicio.
+    """
     global _locales_dir
     _locales_dir = os.path.normpath(path)
     logger.debug(f"Locales directory set to: {_locales_dir}")
