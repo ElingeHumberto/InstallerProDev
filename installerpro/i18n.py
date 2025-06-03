@@ -90,13 +90,12 @@ def get_available_languages():
                     logger.warning(f"Skipping malformed translation file: {f_name}")
                 except Exception as e:
                     logger.warning(f"Error reading translation file {f_name} during scan: {e}")
+        if _default_language not in available_langs:
+            available_langs.append(_default_language)
+        return sorted(list(set(available_langs)))
     except Exception as e:
         logger.error(f"An unexpected error occurred while listing available languages in {_locales_dir}: {e}")
-
-    if _default_language not in available_langs:
-        available_langs.append(_default_language) # Asegurarse de que el idioma por defecto esté siempre disponible
-    
-    return sorted(list(set(available_langs)))
+        return [_default_language] # Fallback en caso de error inesperado
 
 def set_language(lang_code):
     """
@@ -104,7 +103,8 @@ def set_language(lang_code):
     Esta función es llamada por la aplicación principal.
     """
     global _current_language
-    
+    global _locales_dir
+
     # Si el directorio de locales no está establecido, no podemos cargar nada
     if not _locales_dir or not os.path.exists(_locales_dir):
         logger.error(f"Locales directory not set or does not exist: {_locales_dir}. Cannot set language.")
@@ -120,11 +120,11 @@ def set_language(lang_code):
     # Solo recargar si el idioma es diferente o si las traducciones no están cargadas
     if _current_language != lang_code or not _translations:
         _current_language = lang_code
-        if _load_translations(lang_code): # Intentar cargar las traducciones
+        if _load_translations(_current_language): # Intentar cargar las traducciones
             logger.info(f"Application language set to: {_current_language}.")
             return True # Idioma cambiado/cargado con éxito
         else:
-            logger.error(f"Failed to load translations for '{lang_code}'. Falling back to default.")
+            logger.error(f"Failed to load translations for '{_current_language}'. Falling back to default.")
             _current_language = _default_language # Forzar a default si la carga falla
             _translations.clear() # Limpiar traducciones
             return False # Falló la carga

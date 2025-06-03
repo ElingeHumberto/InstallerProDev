@@ -5,8 +5,8 @@ import logging
 import json
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
-from PIL import Image, ImageTk
-from git import Repo, GitCommandError
+from PIL import Image, ImageTk # Aunque no se usa explícitamente en este fragmento, lo mantengo si estaba en tu original
+from git import Repo, GitCommandError # Mantenido por si acaso, aunque no se usa directamente en InstallerProApp
 import platform
 from queue import Queue, Empty
 import threading
@@ -24,10 +24,10 @@ from .utils.git_operations import GitOperationError, is_git_repository, clone_re
 
 # --- Configuración del Logger ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) # Logger a nivel de módulo
 
 # --- CONFIGURACIÓN DE RUTAS ---
-base_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(os.path.abspath(__file__)) # Directorio de your_main_app.py
 
 try:
     import appdirs
@@ -37,6 +37,7 @@ try:
     user_data_dir = appdirs.user_data_dir(APP_NAME, APP_AUTHOR)
 except ImportError:
     logger.warning("appdirs not installed. Falling back to simple user directories. Consider 'pip install appdirs'.")
+    APP_NAME = "InstallerPro" # Asegurar que APP_NAME esté definido
     if platform.system() == "Windows":
         user_config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser("~")), APP_NAME)
         user_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser("~")), APP_NAME)
@@ -51,50 +52,84 @@ config_file_path = os.path.join(user_config_dir, "config.json")
 projects_file_path = os.path.join(user_data_dir, "projects.json")
 
 # --- Cargar/Crear Configuración y Proyectos ---
-app_config = {"language": "en", "base_folder": ""}
+# Esta lógica global de carga parece ser para una configuración inicial o por defecto
+# antes de que ConfigManager la tome. ConfigManager luego maneja su propio archivo.
+# Voy a asumir que esta parte es para establecer los defaults que ConfigManager podría usar
+# si el archivo no existe, aunque ConfigManager también tiene su propia lógica de defaults.
+# Por ahora, la mantengo como en tu original.
+app_config_initial_check = {"language": "en", "base_folder": ""}
 if os.path.exists(config_file_path):
     try:
         with open(config_file_path, 'r', encoding='utf-8') as f:
-            app_config = json.load(f)
-        logger.info(f"Configuration loaded from: {config_file_path}")
+            app_config_initial_check = json.load(f)
+        logger.info(f"Initial configuration check loaded from: {config_file_path}")
     except json.JSONDecodeError as e:
-        logger.error(f"Error decoding config.json: {e}. Using default configuration.")
-        app_config = {"language": "en", "base_folder": ""}
+        logger.error(f"Error decoding config.json during initial check: {e}. Using default initial configuration.")
+        app_config_initial_check = {"language": "en", "base_folder": ""} # Default
 else:
-    logger.info(f"Config file not found. Creating default: {config_file_path}")
-    with open(config_file_path, 'w', encoding='utf-8') as f:
-        json.dump(app_config, f, indent=4)
+    logger.info(f"Config file not found during initial check. Default initial config will be used by ConfigManager if needed.")
+    # No se crea aquí, se deja a ConfigManager
 
-project_data = []
+project_data_initial_check = []
 if os.path.exists(projects_file_path):
     try:
         with open(projects_file_path, 'r', encoding='utf-8') as f:
-            project_data = json.load(f)
-        logger.info(f"Loaded {len(project_data)} projects into treeview.")
+            project_data_initial_check = json.load(f)
+        logger.info(f"Initial check: Loaded {len(project_data_initial_check)} projects structure.")
     except json.JSONDecodeError as e:
-        logger.error(f"Error decoding projects.json: {e}. Starting with empty project list.")
-        project_data = []
+        logger.error(f"Error decoding projects.json during initial check: {e}. ProjectManager will handle.")
+        project_data_initial_check = []
 else:
-    logger.info(f"Projects file not found. Creating default: {projects_file_path}")
-    with open(projects_file_path, 'w', encoding='utf-8') as f:
-        json.dump(project_data, f, indent=4)
+    logger.info(f"Projects file not found during initial check. ProjectManager will handle.")
 
 
 # --- INICIALIZACIÓN DE INTERNACIONALIZACIÓN (i18n) ---
-locales_path = os.path.join(base_dir, 'utils', 'locales')
+# Asegúrate que 'base_dir' apunte a 'installerpro/your_main_app.py'
+# y 'locales' esté en 'installerpro/utils/locales'
+# El project_root es 'installerpro', así que utils está en project_root/utils
+locales_path = os.path.join(project_root, 'utils', 'locales') # Corregido para usar project_root si es necesario
+# O si 'utils' está al mismo nivel que 'your_main_app.py' y 'core' dentro de 'installerpro':
+# locales_path = os.path.join(os.path.dirname(base_dir), 'utils', 'locales')
+# Según tu estructura original: from . import i18n -> 'utils' está al mismo nivel que el __init__.py de installerpro
+# y 'your_main_app.py' está dentro de 'installerpro'.
+# Por lo tanto, si base_dir es installerpro/your_main_app.py, entonces:
+# os.path.dirname(base_dir) es installerpro/
+# La ruta correcta para locales es installerpro/utils/locales
+# base_dir = os.path.dirname(os.path.abspath(__file__)) # Esto es installerpro/
+locales_path_corrected = os.path.join(base_dir, 'utils', 'locales') # Asume que 'utils' está dentro de 'installerpro'
 
-i18n.set_locales_dir(locales_path)
+i18n.set_locales_dir(locales_path_corrected)
 
-initial_language = app_config.get("language", "es")
-i18n.set_language(initial_language) # <--- ¡CAMBIO CLAVE AQUÍ!
+# El idioma inicial se tomará de ConfigManager dentro de InstallerProApp.__init__
+# Esta línea es un fallback o configuración muy temprana.
+initial_language_early_check = app_config_initial_check.get("language", "es")
+i18n.set_language(initial_language_early_check)
 
-_ = i18n.t
+_ = i18n.t # Alias para la función de traducción
+
+# --- CLASE TEXTHANDLER ---
+class TextHandler(logging.Handler):
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
+        self.text_widget.configure(state='disabled')
+        self.setFormatter(logging.Formatter('%(asctime)s %(levelname)s - %(name)s - %(message)s'))
+
+    def emit(self, record):
+        msg = self.format(record)
+        self.text_widget.after(0, self.update_text_widget, msg)
+
+    def update_text_widget(self, msg):
+        self.text_widget.configure(state='normal')
+        self.text_widget.insert(tk.END, msg + '\n')
+        self.text_widget.see(tk.END)
+        self.text_widget.configure(state='disabled')
 
 # --- CLASE TOOLTIP ---
 class Tooltip:
     def __init__(self, widget, text):
         self.widget = widget
-        self.text = text
+        self.text = text # El texto ya debe estar traducido al pasarlo aquí
         self.tooltip_window = None
         self.id = None
         self.x = 0
@@ -142,11 +177,11 @@ class Tooltip:
 
 # --- CLASE ADDPROJECTDIALOG ---
 class AddProjectDialog(tk.Toplevel):
-    def __init__(self, master_window, t_func, base_folder):
+    def __init__(self, master_window, t_func, base_folder): # t_func es self.t de la app principal
         super().__init__(master_window)
 
         self.master_window = master_window
-        self.t = t_func
+        self.t = t_func 
         self.base_folder = base_folder
 
         self.title(self.t("Add Project Title"))
@@ -171,37 +206,39 @@ class AddProjectDialog(tk.Toplevel):
         name_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.name_entry = ttk.Entry(frame, width=40)
         self.name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        Tooltip(name_label, self.t("tooltip.project_name_label"))
-        Tooltip(self.name_entry, self.t("tooltip.project_name_entry"))
+        Tooltip(name_label, self.t("tooltip.project_name_label")) # Correcto: usa self.t
+        Tooltip(self.name_entry, self.t("tooltip.project_name_entry")) # Correcto: usa self.t
 
         local_path_label = ttk.Label(frame, text=self.t("Local Path Label"))
         local_path_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.local_path_var = tk.StringVar()
         self.local_path_entry = ttk.Entry(frame, textvariable=self.local_path_var, width=40)
         self.local_path_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        Tooltip(local_path_label, self.t("tooltip.local_path_label"))
-        Tooltip(self.local_path_entry, self.t("tooltip.local_path_entry"))
+        Tooltip(local_path_label, self.t("tooltip.local_path_label")) # Correcto: usa self.t
+        Tooltip(self.local_path_entry, self.t("tooltip.local_path_entry")) # Correcto: usa self.t
 
         browse_button = ttk.Button(frame, text=self.t("Browse Button"), command=self._browse_local_path)
         browse_button.grid(row=1, column=2, padx=5, pady=5)
-        Tooltip(browse_button, self.t("tooltip.browse_button"))
-
-        self.local_path_var.set(os.path.join(self.base_folder, self.name_entry.get() or self.t("New Project Default Name")))
+        Tooltip(browse_button, self.t("tooltip.browse_button")) # Correcto: usa self.t
+        
+        # Inicializar local_path_var después de crear name_entry
+        default_name_placeholder = self.name_entry.get() or self.t("New Project Default Name")
+        self.local_path_var.set(os.path.join(self.base_folder, default_name_placeholder))
 
 
         repo_url_label = ttk.Label(frame, text=self.t("Repository URL Label"))
         repo_url_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
         self.repo_url_entry = ttk.Entry(frame, width=40)
         self.repo_url_entry.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
-        Tooltip(repo_url_label, self.t("tooltip.repo_url_label"))
-        Tooltip(self.repo_url_entry, self.t("tooltip.repo_url_entry"))
+        Tooltip(repo_url_label, self.t("tooltip.repo_url_label")) # Correcto: usa self.t
+        Tooltip(self.repo_url_entry, self.t("tooltip.repo_url_entry")) # Correcto: usa self.t
 
         branch_label = ttk.Label(frame, text=self.t("Branch Optional Label"))
         branch_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
         self.branch_entry = ttk.Entry(frame, width=40)
         self.branch_entry.grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
-        Tooltip(branch_label, self.t("tooltip.branch_label"))
-        Tooltip(self.branch_entry, self.t("tooltip.branch_entry"))
+        Tooltip(branch_label, self.t("tooltip.branch_label")) # Correcto: usa self.t
+        Tooltip(self.branch_entry, self.t("tooltip.branch_entry")) # Correcto: usa self.t
 
         button_frame = ttk.Frame(frame)
         button_frame.grid(row=4, column=0, columnspan=3, pady=10)
@@ -218,7 +255,7 @@ class AddProjectDialog(tk.Toplevel):
 
     def _browse_local_path(self):
         folder_selected = filedialog.askdirectory(
-            parent=self,
+            parent=self, # Asegurar que el diálogo sea modal a este Toplevel
             initialdir=self.base_folder,
             title=self.t("Select Local Path Title")
         )
@@ -231,7 +268,7 @@ class AddProjectDialog(tk.Toplevel):
         repo_url = self.repo_url_entry.get().strip()
         branch = self.branch_entry.get().strip()
 
-        if not name or not local_path_full or not repo_url:
+        if not name or not local_path_full or not repo_url: # Repo URL también es requerido
             messagebox.showerror(self.t("Input Error"), self.t("Please fill in all required fields: Name, Local Path, Repository URL."))
             return
 
@@ -239,7 +276,7 @@ class AddProjectDialog(tk.Toplevel):
             'name': name,
             'local_path_full': local_path_full,
             'repo_url': repo_url,
-            'branch': branch if branch else 'main'
+            'branch': branch if branch else 'main' # Default a 'main' si está vacío
         }
         self.destroy()
 
@@ -247,7 +284,7 @@ class AddProjectDialog(tk.Toplevel):
         self.result = None
         self.destroy()
 
-    def exec_(self):
+    def exec_(self): # Para compatibilidad si se llama así desde fuera
         self.master_window.wait_window(self)
         return self.result
 
@@ -255,56 +292,74 @@ class AddProjectDialog(tk.Toplevel):
         self.update_idletasks()
         width = self.winfo_width()
         height = self.winfo_height()
-        x = self.master_window.winfo_x() + (self.master_window.winfo_width() // 2) - (width // 2)
-        y = self.master_window.winfo_y() + (self.master_window.winfo_height() // 2) - (height // 2)
+        # Asegurar que master_window es la ventana principal para centrar correctamente
+        master_x = self.master_window.winfo_x()
+        master_y = self.master_window.winfo_y()
+        master_width = self.master_window.winfo_width()
+        master_height = self.master_window.winfo_height()
+        
+        x = master_x + (master_width // 2) - (width // 2)
+        y = master_y + (master_height // 2) - (height // 2)
         self.geometry(f'{width}x{height}+{x}+{y}')
 
-
-# --- CLASE INSTALLERPROAPP (AHORA CORRECTAMENTE DEFINIDA) ---
+# --- CLASE INSTALLERPROAPP (CON MODIFICACIONES) ---
 class InstallerProApp:
     def __init__(self, master):
         self.master = master
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__) # Logger específico para la instancia
 
-        self.master.withdraw()
+        self.master.withdraw() # Ocultar ventana principal hasta que todo esté listo
 
-        self.t = i18n.t
+        self.t = i18n.t # Alias a la función de traducción del módulo i18n
 
         # 1. Inicializar el gestor de configuración
-        self.config_manager = ConfigManager(config_file_path, app_config)
+        # Pasa app_config_initial_check como configuración inicial que ConfigManager puede usar o sobreescribir
+        self.config_manager = ConfigManager(config_file_path, app_config_initial_check)
 
+        # Obtener la carpeta base DESPUÉS de que ConfigManager la haya cargado o establecido por defecto
         initial_base_folder = os.path.abspath(self.config_manager.get_base_folder())
-        os.makedirs(initial_base_folder, exist_ok=True)
-        self.logger.info(self.t("Base folder created: {folder}", folder=initial_base_folder))
+        os.makedirs(initial_base_folder, exist_ok=True) # Asegurar que exista
+        self.logger.info(self.t("Base folder configured: {folder}", folder=initial_base_folder))
+
 
         # 2. Inicializar el ProjectManager
         self.project_manager = ProjectManager(
-            base_folder=initial_base_folder,
-            config_manager=self.config_manager,
+            base_folder=initial_base_folder, # Usar la carpeta base ya validada
+            config_manager=self.config_manager, # Pasar la instancia de config_manager
             projects_file_path=projects_file_path
         )
 
-        # 3. Configurar el traductor (i18n) y establecer el idioma inicial
-        initial_lang_code = self.config_manager.get_language() or i18n.get_current_language()
-        if not i18n.set_language(initial_lang_code):
-            self.logger.warning(self.t("Could not set initial language to {lang}. Defaulting to 'en'.", lang=initial_lang_code))
-            i18n.set_language("en")
+        # 3. Configurar el traductor (i18n) y establecer el idioma inicial desde ConfigManager
+        initial_lang_code = self.config_manager.get_language() # Obtener idioma de config
+        if not i18n.set_language(initial_lang_code): # Intentar establecerlo en el módulo i18n
+            self.logger.warning(self.t("Could not set initial language to {lang} from config. Defaulting to 'en'.", lang=initial_lang_code))
+            i18n.set_language("en") # Fallback a 'en'
+            self.config_manager.set_language("en") # Actualizar config si hubo fallback
 
-        self.task_queue = Queue()
+        self.task_queue = Queue() # Cola para tareas asíncronas
 
         # 4. Configurar y mostrar UI
-        self._setup_ui()
-        self.update_ui_texts()
-        self._load_projects_into_treeview()
+        self._setup_ui() # Esto llamará a _recreate_menubar internamente
+        self.update_ui_texts() # Esto actualizará todos los textos, incluyendo el menú recreado
+        
+        # _load_projects_into_treeview() es llamado por update_ui_texts(),
+        # así que no es estrictamente necesario aquí, pero no hace daño para el primer llenado.
+        self._load_projects_into_treeview() 
 
-        self.master.after(100, self._process_task_queue)
+        self.master.after(100, self._process_task_queue) # Iniciar el procesador de la cola de tareas
 
-        self.logger.info(self.t("App Title") + self.t(" started."))
-        self.master.deiconify()
+        self.logger.info(self.t("App Title") + " " + self.t("started.")) # Ejemplo de log traducido
+        self.master.deiconify() # Mostrar ventana principal
 
-    def _setup_ui(self):
-        self.main_frame = ttk.Frame(self.master, padding="10")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+    # **** NUEVO MÉTODO: _recreate_menubar ****
+    def _recreate_menubar(self):
+        self.logger.debug("Recreando la barra de menú...")
+        if hasattr(self, 'menubar') and self.menubar:
+            try:
+                self.menubar.destroy()
+                self.logger.debug("Barra de menú anterior destruida.")
+            except tk.TclError as e:
+                self.logger.warning(f"No se pudo destruir la barra de menú anterior: {e}")
 
         self.menubar = tk.Menu(self.master)
         self.master.config(menu=self.menubar)
@@ -314,7 +369,18 @@ class InstallerProApp:
 
         self.lang_menu = tk.Menu(self.view_menu, tearoff=0)
         self.view_menu.add_cascade(menu=self.lang_menu, label=self.t("Language Menu"))
-        self._populate_language_menu()
+        
+        self._populate_language_menu() # Llama a tu método existente para llenar las opciones de idioma
+        
+        self.logger.info("Barra de menú recreada y configurada exitosamente.")
+
+    # **** MÉTODO MODIFICADO: _setup_ui ****
+    def _setup_ui(self):
+        self.main_frame = ttk.Frame(self.master, padding="10")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # La creación del menubar se delega a _recreate_menubar
+        self._recreate_menubar() # Llamada para la creación inicial
 
         self.tree = ttk.Treeview(self.main_frame, columns=("name", "path", "url", "branch", "status"), show="headings")
         self.tree.heading("name", text=self.t("Project Name Column"))
@@ -357,48 +423,45 @@ class InstallerProApp:
 
         self.base_folder_label = ttk.Label(self.main_frame, text="")
         self.base_folder_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 5))
-        self.update_base_folder_label()
+        # self.update_base_folder_label() # Será llamado en update_ui_texts
 
+    # _populate_language_menu no necesita cambios, se mantiene como en tu archivo original
     def _populate_language_menu(self):
-        self.lang_menu.delete(0, tk.END)
+        self.lang_menu.delete(0, tk.END) # Limpiar opciones anteriores
 
-        if not hasattr(self, 'selected_language_var'):
+        if not hasattr(self, 'selected_language_var'): # Crear si no existe
             self.selected_language_var = tk.StringVar()
 
         available_lang_codes = i18n.get_available_languages()
 
         for lang_code in available_lang_codes:
-            lang_name_key = f"language_option.{lang_code}"
-            display_name = self.t(lang_name_key, lang=lang_code)
-            if display_name == lang_name_key:
-                display_name = lang_code.upper()
+            lang_name_key = f"language_option.{lang_code}" # ej. language_option.en
+            # Obtener el nombre legible del idioma usando la traducción actual
+            # y especificando el 'lang' para la propia clave del nombre del idioma si es necesario
+            display_name = self.t(lang_name_key, lang=lang_code) 
+            if display_name == lang_name_key: # Fallback si la clave no está traducida
+                display_name = lang_code.upper() 
 
             self.lang_menu.add_radiobutton(
                 label=display_name,
-                command=lambda lc=lang_code: self.change_language(lc),
-                variable=self.selected_language_var,
-                value=lang_code
+                command=lambda lc=lang_code: self.change_language(lc), # Usar lambda para pasar el código
+                variable=self.selected_language_var, # Variable para controlar selección
+                value=lang_code # Valor asociado a esta opción
             )
-
+        # Establecer la selección actual del radiobutton
         self.selected_language_var.set(i18n.get_current_language())
 
+    # **** MÉTODO MODIFICADO: update_ui_texts ****
     def update_ui_texts(self):
+        current_lang = i18n.get_current_language()
+        self.logger.info(f"Actualizando textos de la UI al idioma: {current_lang}")
         self.master.title(self.t("App Title"))
 
-        try:
-            if hasattr(self, 'menubar') and self.menubar is not None:
-                self.menubar.entryconfig(0, label=self.t("View Menu"))
+        # --- INICIO DE LA CORRECCIÓN PRINCIPAL ---
+        self._recreate_menubar() # Recrea toda la barra de menú con los textos actuales
+        # --- FIN DE LA CORRECCIÓN PRINCIPAL ---
 
-                if hasattr(self, 'view_menu') and self.view_menu is not None:
-                    self.view_menu.entryconfig(0, label=self.t("Language Menu"))
-                else:
-                    self.logger.warning("view_menu attribute not found or is None. Cannot update Language Menu text.")
-            else:
-                self.logger.warning("menubar attribute not found or is None. Cannot update main menu texts.")
-
-        except Exception as e:
-            self.logger.error(f"Error updating menu texts: {e}")
-
+        # Actualizar otros elementos de la UI
         self.tree.heading("name", text=self.t("Project Name Column"))
         self.tree.heading("path", text=self.t("Local Path Column"))
         self.tree.heading("url", text=self.t("Repository URL Column"))
@@ -414,76 +477,111 @@ class InstallerProApp:
         self.help_button.config(text=self.t("button.help"))
 
         self.update_base_folder_label()
-        self._load_projects_into_treeview()
-        self.logger.info("UI texts updated successfully.")
+        self._load_projects_into_treeview() # Para actualizar "No projects" o estados traducidos
+        self.logger.info("Textos de la UI actualizados exitosamente.")
 
     def _process_task_queue(self):
         try:
-            while not self.task_queue.empty():
-                callback, args, kwargs = self.task_queue.get_nowait()
+            while not self.task_queue.empty(): # Procesar todas las tareas pendientes
+                callback, args, kwargs = self.task_queue.get_nowait() # No bloquear
                 callback(*args, **kwargs)
-                self.task_queue.task_done()
-        except Exception as e:
-            self.logger.error(f"Error processing task from queue: {e}")
+                self.task_queue.task_done() # Marcar tarea como completada
+        except Empty: # Si la cola está vacía, no hacer nada
             pass
+        except Exception as e:
+            self.logger.error(f"Error procesando tarea de la cola: {e}")
         finally:
+            # Reprogramar la revisión de la cola
             self.master.after(100, self._process_task_queue)
 
     def update_base_folder_label(self):
         current_base_folder = self.config_manager.get_base_folder()
-        label_text = self.t("Base folder created: {path}", path=current_base_folder)
+        # Usar una clave de traducción para el formato de la etiqueta
+        label_text = self.t("base_folder_status_label", path=current_base_folder) 
         self.base_folder_label.config(text=label_text)
 
     def change_language(self, lang_code):
         old_lang = i18n.get_current_language()
-        if self.config_manager.set_language(lang_code):
-            i18n.set_language(lang_code)
-            self.update_ui_texts()
-            self.selected_language_var.set(lang_code)
-            messagebox.showinfo(
-                self.t("Language Changed"),
-                self.t("Application language changed to: {lang}", lang=i18n.t(f"language_option.{lang_code}", lang=lang_code))
-            )
-            self.logger.info(f"Language changed from {old_lang} to {lang_code}.")
+        # config_manager.set_language ahora valida si el idioma existe en i18n y guarda en config.json
+        if self.config_manager.set_language(lang_code): 
+            # i18n.set_language carga las traducciones para el nuevo idioma.
+            if i18n.set_language(lang_code): # Importante llamar para cargar traducciones
+                self.update_ui_texts() # Actualiza toda la UI, incluyendo el menú recreado
+                self.selected_language_var.set(lang_code) # Actualiza el radiobutton seleccionado
+                
+                # Mostrar mensaje de confirmación
+                lang_display_name_key = f"language_option.{lang_code}"
+                lang_display_name = self.t(lang_display_name_key)
+                if lang_display_name == lang_display_name_key: # Fallback
+                    lang_display_name = lang_code.upper()
+
+                messagebox.showinfo(
+                    self.t("Language Changed Title"), # Título del messagebox
+                    self.t("Language changed message", lang=lang_display_name) # Mensaje
+                )
+                self.logger.info(f"Idioma cambiado de {old_lang} a {lang_code}.")
+            else:
+                # Esto no debería ocurrir si config_manager.set_language tuvo éxito,
+                # ya que ambos deberían usar la misma lista de idiomas disponibles de i18n.
+                messagebox.showerror(
+                    self.t("Error Changing Language Title"),
+                    self.t("Error loading translations message", lang=lang_code)
+                )
+                self.logger.error(f"Fallo al cargar traducciones para {lang_code} después de que ConfigManager lo aceptara.")
+                # Considerar revertir a old_lang en i18n y config_manager si la carga falla aquí.
         else:
+            # Esto ocurre si lang_code no está en i18n.get_available_languages()
+            # según la validación en config_manager.set_language
             messagebox.showerror(
-                self.t("Error"),
-                self.t("Language '{lang}' not found in loaded translations.", lang=lang_code)
+                self.t("Error Changing Language Title"),
+                self.t("Language not available message", lang=lang_code)
             )
-            self.logger.error(f"Failed to change language to {lang_code}.")
+            self.logger.error(f"Intento de cambiar a idioma no disponible: {lang_code}.")
+
 
     def _load_projects_into_treeview(self):
-        for item in self.tree.get_children():
+        for item in self.tree.get_children(): # Limpiar vista previa
             self.tree.delete(item)
 
-        projects = self.project_manager.get_projects()
+        projects = self.project_manager.get_projects() # Obtener solo proyectos no marcados como 'deleted'
         if not projects:
+            # Mostrar mensaje si no hay proyectos, usando traducción
             self.tree.insert("", tk.END, text="", values=(
-                self.t("No Projects Found"), "", "", "", ""
+                self.t("No Projects Found Message"), "", "", "", "" # Mensaje traducido
             ))
-            self.logger.info("No projects to display in treeview.")
+            self.logger.info("No hay proyectos para mostrar en la vista de árbol.")
             return
 
         for project in projects:
-            status_display = self.t(project.get('status', 'Unknown Status Value'))
+            # Traducir el estado del proyecto si es una clave de traducción
+            # Asumiendo que 'status' puede ser una clave como "Clean", "Modified", etc.
+            status_key = f"status.{project.get('status', 'Unknown').lower().replace(' ', '_')}" # ej. status.modified
+            status_display = self.t(status_key)
+            if status_display == status_key: # Si no hay traducción específica, usar el valor crudo
+                status_display = project.get('status', self.t("status.unknown"))
+
+
             self.tree.insert("", tk.END,
                                 values=(project['name'], project['local_path'], project['repo_url'], project['branch'], status_display),
-                                tags=("deleted" if project.get('deleted') else "normal",))
-        self.tree.tag_configure("deleted", foreground="red")
-        self.logger.info(f"Loaded {len(projects)} projects into treeview.")
+                                tags=("deleted" if project.get('deleted') else "normal",)) # 'deleted' no debería aparecer aquí
+        
+        self.tree.tag_configure("deleted", foreground="red") # Aunque no se muestren, la configuración está
+        self.logger.info(f"Cargados {len(projects)} proyectos en la vista de árbol.")
+
 
     def _get_selected_project_path(self):
-        selected_item = self.tree.focus()
+        selected_item = self.tree.focus() # Obtener el item seleccionado (foco)
         if not selected_item:
             messagebox.showwarning(
-                self.t("Selection Required"),
-                self.t("Please select a project from the list.")
+                self.t("Selection Required Title"), # Título traducido
+                self.t("Please select a project message") # Mensaje traducido
             )
-            self.logger.warning("No project selected for operation.")
+            self.logger.warning("Ningún proyecto seleccionado para la operación.")
             return None
-        return self.tree.item(selected_item, 'values')[1]
+        # El índice 1 es 'path' según la definición de columnas en _setup_ui
+        return self.tree.item(selected_item, 'values')[1] 
 
-    def _process_queue(self):
+    def _process_queue(self): # Mantener este método aunque esté vacío si planeas usarlo
         pass
 
     def _run_async_task(self, target_function, *args, callback_on_success=None, callback_on_failure=None, **kwargs):
@@ -491,33 +589,38 @@ class InstallerProApp:
             try:
                 result = target_function(*args, **kwargs)
                 if callback_on_success:
-                    self.task_queue.put((callback_on_success, (result,), {}))
-            except Exception as e:
+                    # Poner en cola la tupla (función, tupla_de_args, dict_de_kwargs)
+                    self.task_queue.put((callback_on_success, (result,), {})) 
+            except Exception as e: # Capturar cualquier excepción de la tarea
+                self.logger.error(f"Excepción en hilo de tarea para {target_function.__name__}: {e}", exc_info=True)
                 if callback_on_failure:
                     self.task_queue.put((callback_on_failure, (e,), {}))
 
         thread = threading.Thread(target=task_wrapper)
-        thread.daemon = True
+        thread.daemon = True # Permitir que la app cierre aunque los hilos estén corriendo
         thread.start()
 
     def _add_project(self):
+        # Pasar self.t (la función de traducción de la instancia) al diálogo
         dialog = AddProjectDialog(self.master, t_func=self.t, base_folder=self.config_manager.get_base_folder())
-        if dialog.exec_():
+        # dialog.exec_() no es un método estándar de Toplevel. Usar wait_window.
+        # El método exec_() que definiste en AddProjectDialog usa wait_window.
+        if dialog.exec_(): # Esto llamará a tu wait_window y devolverá el resultado
             name = dialog.result['name']
             repo_url = dialog.result['repo_url']
             local_path_full = dialog.result['local_path_full']
             branch = dialog.result['branch']
 
-            messagebox.showinfo(
-                self.t("Adding Project"),
-                self.t("Adding project progress", project=name)
+            messagebox.showinfo( # Usar traducciones para el messagebox
+                self.t("Adding Project Title"), 
+                self.t("Adding project progress message", project=name) 
             )
-            self.logger.info(f"Starting async add project for '{name}'...")
+            self.logger.info(f"Iniciando adición asíncrona del proyecto '{name}'...")
             self._run_async_task(
-                self.project_manager.add_project,
-                name, repo_url, local_path_full, branch,
+                self.project_manager.add_project, # Función a ejecutar
+                name, repo_url, local_path_full, branch, # Args para add_project
                 callback_on_success=self._on_project_added_success,
-                callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Adding Project"))
+                callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Adding Project Operation Name")) # Nombre de operación traducido
             )
 
     def _remove_project(self):
@@ -526,42 +629,47 @@ class InstallerProApp:
             return
 
         project = self.project_manager.get_project_by_path(selected_path)
-        if not project:
-            messagebox.showerror(self.t("Error"), self.t("Selected project data not found in configuration."))
-            self.logger.error(f"Attempted to remove project not found in manager: {selected_path}")
+        if not project: # Esto no debería pasar si _get_selected_project_path devolvió algo y la lista está sincronizada
+            messagebox.showerror(self.t("Error Title"), self.t("Selected project data not found error"))
+            self.logger.error(f"Intento de eliminar proyecto no encontrado en el gestor: {selected_path}")
             return
 
+        # Usar traducciones para los diálogos de confirmación
         confirm_soft_delete = messagebox.askyesno(
-            self.t("Confirm Remove"),
-            self.t("Are you sure you want to mark this project as deleted? It will not be removed from disk. Select 'No' to physically remove it.")
+            self.t("Confirm Remove Title"),
+            self.t("Confirm soft delete message")
         )
 
-        if confirm_soft_delete:
-            messagebox.showinfo(self.t("Removing Project"), self.t("Removing project progress", project=project.get('name', 'Unnamed Project')))
-            self.logger.info(f"Starting async soft remove project for '{project.get('name')}'...")
+        project_name_display = project.get('name', self.t("Unnamed Project Default"))
+
+        if confirm_soft_delete: # El usuario eligió "Sí" para borrado suave
+            messagebox.showinfo(self.t("Removing Project Title"), self.t("Removing project progress message", project=project_name_display))
+            self.logger.info(f"Iniciando borrado suave asíncrono del proyecto '{project_name_display}'...")
             self._run_async_task(
                 self.project_manager.remove_project,
-                selected_path, permanent=False,
-                callback_on_success=lambda _: self._on_project_removed_success(project.get('name', 'Unnamed Project')),
-                callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Removing Project"))
+                selected_path, permanent=False, # Borrado suave
+                callback_on_success=lambda result: self._on_project_removed_success(project_name_display), # Pasar nombre para mensaje
+                callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Removing Project Operation Name"))
             )
-        elif confirm_soft_delete is False:
+        elif confirm_soft_delete is False: # El usuario eligió "No" (lo que significa que considerará el borrado físico)
             confirm_physical_delete = messagebox.askyesno(
-                self.t("Confirm Physical Remove"),
-                self.t("WARNING: Are you absolutely sure you want to PERMANENTLY remove the project folder '{path}' from disk? This action cannot be undone.", path=selected_path)
+                self.t("Confirm Physical Remove Title"),
+                self.t("Confirm physical delete message", path=selected_path) # Mensaje de advertencia
             )
             if confirm_physical_delete:
-                messagebox.showinfo(self.t("Removing Project"), self.t("Removing project progress", project=project.get('name', 'Unnamed Project')))
-                self.logger.info(f"Starting async physical remove project for '{project.get('name')}'...")
+                messagebox.showinfo(self.t("Removing Project Title"), self.t("Removing project progress message", project=project_name_display))
+                self.logger.info(f"Iniciando borrado físico asíncrono del proyecto '{project_name_display}'...")
                 self._run_async_task(
                     self.project_manager.remove_project,
-                    selected_path, permanent=True,
-                    callback_on_success=lambda _: self._on_project_physically_removed_removed_success(project.get('name', 'Unnamed Project')),
-                    callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Physical Removing Project"))
+                    selected_path, permanent=True, # Borrado físico
+                    callback_on_success=lambda result: self._on_project_physically_removed_success(project_name_display), # Pasar nombre
+                    callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Physical Removing Project Operation Name"))
                 )
-        else:
-            self.logger.info("Project removal cancelled by user.")
-            messagebox.showinfo(self.t("Action Cancelled"), self.t("Project removal cancelled."))
+        # Si confirm_soft_delete es None (usuario cerró el diálogo), no hacer nada.
+        else: 
+            self.logger.info("Eliminación de proyecto cancelada por el usuario.")
+            messagebox.showinfo(self.t("Action Cancelled Title"), self.t("Project removal cancelled message"))
+
 
     def _update_project(self):
         selected_path = self._get_selected_project_path()
@@ -570,20 +678,21 @@ class InstallerProApp:
 
         project = self.project_manager.get_project_by_path(selected_path)
         if not project:
-            messagebox.showerror(self.t("Error"), self.t("Selected project data not found in configuration."))
-            self.logger.error(f"Attempted to update project not found in manager: {selected_path}")
+            messagebox.showerror(self.t("Error Title"), self.t("Selected project data not found error"))
+            self.logger.error(f"Intento de actualizar proyecto no encontrado en el gestor: {selected_path}")
             return
-
+        
+        project_name_display = project.get('name', self.t("Unnamed Project Default"))
         messagebox.showinfo(
-            self.t("Updating Project Message"),
-            self.t("Updating project progress", project=project.get('name', 'Unnamed Project'))
+            self.t("Updating Project Title"), 
+            self.t("Updating project progress message", project=project_name_display)
         )
-        self.logger.info(f"Starting async update project for '{project.get('name')}' (pull)...")
+        self.logger.info(f"Iniciando actualización asíncrona (pull) del proyecto '{project_name_display}'...")
         self._run_async_task(
             self.project_manager.update_project,
             selected_path, do_pull=True,
             callback_on_success=self._on_project_updated_success,
-            callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Updating Project"))
+            callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Updating Project Operation Name"))
         )
 
     def _scan_base_folder(self):
@@ -591,36 +700,38 @@ class InstallerProApp:
         folder_selected = filedialog.askdirectory(
             parent=self.master,
             initialdir=current_base_folder,
-            title=self.t("Select Base Folder Title")
+            title=self.t("Select Base Folder Title") # Título del diálogo traducido
         )
         if folder_selected:
             try:
+                # Actualizar la carpeta base en config_manager y project_manager
                 self.config_manager.set_base_folder(folder_selected)
-                self.project_manager.set_base_folder(folder_selected)
-                self.update_base_folder_label()
+                self.project_manager.set_base_folder(folder_selected) # Asegurar que project_manager también se actualice
+                self.update_base_folder_label() # Actualizar etiqueta en la UI
 
                 messagebox.showinfo(
-                    self.t("Scanning Base Folder"),
-                    self.t("Scanning base folder progress", folder=folder_selected)
+                    self.t("Scanning Base Folder Title"), 
+                    self.t("Scanning base folder progress message", folder=folder_selected)
                 )
-                self.logger.info(f"Starting async scan base folder for '{folder_selected}'...")
+                self.logger.info(f"Iniciando escaneo asíncrono de la carpeta base '{folder_selected}'...")
                 self._run_async_task(
-                    self.project_manager.scan_base_folder,
+                    self.project_manager.scan_base_folder, # No necesita args aquí
                     callback_on_success=self._on_scan_complete_success,
-                    callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Scan Base Folder")),
+                    callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Scan Base Folder Operation Name")),
                 )
-            except Exception as e:
+            except Exception as e: # Capturar errores al establecer la carpeta base
                 messagebox.showerror(
-                    self.t("Scan Error"),
-                    self.t("An unexpected error occurred during scanning: {error}", error=str(e))
+                    self.t("Scan Error Title"),
+                    self.t("Unexpected error during scan setup message", error=str(e))
                 )
-                self.logger.critical(f"Unexpected error during _scan_base_folder setup: {e}")
-        else:
+                self.logger.critical(f"Error inesperado durante la configuración de _scan_base_folder: {e}", exc_info=True)
+        else: # folder_selected es None o vacío
             messagebox.showinfo(
-                self.t("Selection Canceled"),
-                self.t("Base folder selection cancelled message")
+                self.t("Selection Canceled Title"), 
+                self.t("Base folder selection cancelled info")
             )
-            self.logger.info("Base folder selection cancelled.")
+            self.logger.info("Selección de carpeta base cancelada.")
+
 
     def _push_project(self):
         selected_path = self._get_selected_project_path()
@@ -629,117 +740,121 @@ class InstallerProApp:
 
         project = self.project_manager.get_project_by_path(selected_path)
         if not project:
-            messagebox.showerror(self.t("Error"), self.t("Selected project data not found in configuration."))
-            self.logger.error(f"Attempted to push project not found in manager: {selected_path}")
+            messagebox.showerror(self.t("Error Title"), self.t("Selected project data not found error"))
+            self.logger.error(f"Intento de push a proyecto no encontrado en el gestor: {selected_path}")
             return
-
+        
+        project_name_display = project.get('name', self.t("Unnamed Project Default"))
         messagebox.showinfo(
-            self.t("Pushing Project Message"),
-            self.t("Pushing project progress", project=project.get('name', 'Unnamed Project'))
+            self.t("Pushing Project Title"), 
+            self.t("Pushing project progress message", project=project_name_display)
         )
-        self.logger.info(f"Starting async push project for '{project.get('name')}'...")
+        self.logger.info(f"Iniciando push asíncrono del proyecto '{project_name_display}'...")
         self._run_async_task(
             self.project_manager.push_project,
             selected_path,
             callback_on_success=self._on_project_pushed_success,
-            callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Pushing Project"))
+            callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Pushing Project Operation Name"))
         )
 
     def _refresh_all_statuses(self):
-        """Refreshes the Git status of all projects asynchronously."""
         messagebox.showinfo(
-            self.t("Refreshing Statuses"),
-            self.t("Refreshing all project statuses...")
+            self.t("Refreshing Statuses Title"), 
+            self.t("Refreshing all project statuses message")
         )
-        self.logger.info("Starting async refresh of all project statuses.")
+        self.logger.info("Iniciando actualización asíncrona de todos los estados de proyecto.")
         self._run_async_task(
-            self.project_manager.refresh_project_statuses,
-            callback_on_success=lambda _: self._on_refresh_status_complete_success(None),
-            callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Refresh Statuses")),
+            self.project_manager.refresh_project_statuses, # No necesita args
+            callback_on_success=self._on_refresh_status_complete_success, # Modificado para no esperar args innecesarios
+            callback_on_failure=lambda e: self._on_project_op_failure(e, self.t("Refresh Statuses Operation Name")),
         )
 
     def _show_help(self):
-        help_title = self.t("help.title")
-        help_content = self.t("help.content")
+        help_title = self.t("help.title") # Clave para el título de ayuda
+        help_content = self.t("help.content") # Clave para el contenido de ayuda
         messagebox.showinfo(help_title, help_content)
-        self.logger.info("Help dialog shown.")
+        self.logger.info("Diálogo de ayuda mostrado.")
 
     # Callbacks para operaciones asíncronas
-    def _on_project_added_success(self, project_data):
-        self._load_projects_into_treeview()
+    def _on_project_added_success(self, project_data): # project_data es el proyecto devuelto por project_manager.add_project
+        self._load_projects_into_treeview() # Actualizar la lista en la UI
         messagebox.showinfo(
-            self.t("Success"),
-            self.t("Project Added And Cloned Success", project=project_data['name'], path=project_data['local_path'])
+            self.t("Success Title"), 
+            self.t("Project Added And Cloned Success message", project=project_data['name'], path=project_data['local_path'])
         )
-        self.logger.info(f"Successfully added project '{project_data['name']}'.")
+        self.logger.info(f"Proyecto '{project_data['name']}' añadido y clonado exitosamente.")
 
-    def _on_project_op_failure(self, error, op_name="Operation"):
+    def _on_project_op_failure(self, error, op_name="Operation"): # op_name ya debería estar traducido al pasar aquí
         messagebox.showerror(
-            self.t("Error"),
-            self.t("An error occurred during {op_name}: {error_message}", op_name=op_name, error_message=str(error))
+            self.t("Error Title"), 
+            self.t("Generic error message", op_name=op_name, error_message=str(error))
         )
-        self.logger.error(f"Failed during {op_name}: {error}")
-        self._load_projects_into_treeview()
+        self.logger.error(f"Fallo durante {op_name}: {error}", exc_info=True) # Log con traceback si es una excepción
+        self._load_projects_into_treeview() # Refrescar vista por si algo cambió parcialmente
 
-    def _on_project_removed_success(self, project_name):
+    def _on_project_removed_success(self, project_name): # project_name se pasa para el mensaje
         self._load_projects_into_treeview()
         messagebox.showinfo(
-            self.t("Project Marked as Deleted"),
-            self.t("Project Marked as Deleted", project=project_name)
+            self.t("Project Marked as Deleted Title"), 
+            self.t("Project Marked as Deleted message", project=project_name)
         )
-        self.logger.info(f"Project '{project_name}' soft-deleted.")
+        self.logger.info(f"Proyecto '{project_name}' marcado como eliminado (borrado suave).")
 
-    def _on_project_physically_removed_success(self, project_name):
+    def _on_project_physically_removed_success(self, project_name): # project_name se pasa
         self._load_projects_into_treeview()
         messagebox.showinfo(
-            self.t("Project Physically Removed"),
-            self.t("Project Physically Removed Success", project=project_name)
+            self.t("Project Physically Removed Title"), 
+            self.t("Project Physically Removed Success message", project=project_name)
         )
-        self.logger.info(f"Project '{project_name}' physically removed.")
+        self.logger.info(f"Proyecto '{project_name}' eliminado físicamente.")
 
-    def _on_project_updated_success(self, pull_result):
+    def _on_project_updated_success(self, pull_result_message): # pull_result_message es el stdout o mensaje de estado
         self._load_projects_into_treeview()
-        if pull_result == "Up-to-date":
+        # Asumir que pull_result_message ya es un texto legible o una clave que se puede usar.
+        # Sería mejor si project_manager.update_project devuelve un código/clave de estado.
+        if "Already up to date." in pull_result_message or "Up-to-date" == pull_result_message: # Comparación más robusta
             messagebox.showinfo(
-                self.t("Update Complete"),
-                self.t("Project is already up-to-date.")
+                self.t("Update Complete Title"), 
+                self.t("Project is already up-to-date message")
             )
         else:
             messagebox.showinfo(
-                self.t("Update Complete"),
-                self.t("Project Updated Success")
+                self.t("Update Complete Title"), 
+                self.t("Project Updated Success message") # Mensaje genérico de éxito
             )
-        self.logger.info(f"Project updated (pulled) successfully. Result: {pull_result}")
+        self.logger.info(f"Proyecto actualizado (pull) exitosamente. Resultado: {pull_result_message}")
 
-    def _on_project_pushed_success(self, push_result):
+
+    def _on_project_pushed_success(self, push_result_message):
         self._load_projects_into_treeview()
-        if push_result == "Up-to-date (Push)":
+        if "Everything up-to-date" in push_result_message or "Up-to-date (Push)" == push_result_message:
             messagebox.showinfo(
-                self.t("Push Complete"),
-                self.t("Project is already up-to-date (no changes to push).")
+                self.t("Push Complete Title"), 
+                self.t("Project is already up-to-date (no changes to push) message")
             )
         else:
             messagebox.showinfo(
-                self.t("Push Complete"),
-                self.t("Project Pushed Success")
+                self.t("Push Complete Title"), 
+                self.t("Project Pushed Success message")
             )
-        self.logger.info(f"Project pushed successfully. Result: {push_result}")
+        self.logger.info(f"Proyecto 'pusheado' exitosamente. Resultado: {push_result_message}")
 
-    def _on_scan_complete_success(self, new_projects_count):
+    def _on_scan_complete_success(self, new_projects_count): # new_projects_count es devuelto por scan_base_folder
         self._load_projects_into_treeview()
         messagebox.showinfo(
-            self.t("Scan Complete"),
-            self.t("Found {count} new projects.", count=new_projects_count)
+            self.t("Scan Complete Title"), 
+            self.t("Scan complete found new projects message", count=new_projects_count)
         )
-        self.logger.info(f"Scan complete. Found {new_projects_count} new projects.")
+        self.logger.info(f"Escaneo completo. Encontrados {new_projects_count} nuevos proyectos.")
 
-    def _on_refresh_status_complete_success(self, *args):
+    def _on_refresh_status_complete_success(self, *args): # Ignorar args si no se esperan
         self._load_projects_into_treeview()
         messagebox.showinfo(
-            self.t("Status Refresh Complete"),
-            self.t("All project statuses have been refreshed.")
+            self.t("Status Refresh Complete Title"), 
+            self.t("All project statuses refreshed message")
         )
-        self.logger.info("All project statuses refreshed successfully.")
+        self.logger.info("Todos los estados de proyecto actualizados exitosamente.")
+
 
     def run(self):
         self.master.mainloop()
@@ -747,5 +862,6 @@ class InstallerProApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = InstallerProApp(root)
+    # No se necesita pasar instancias aquí, InstallerProApp las crea o usa las globales
+    app = InstallerProApp(root) 
     app.run()
