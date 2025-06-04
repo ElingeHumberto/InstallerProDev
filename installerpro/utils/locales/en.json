@@ -144,7 +144,7 @@
     "Pushing Project Operation Name": "Push Project",
     "Refresh Statuses Operation Name": "Refresh Statuses",
     "tooltip.project_name_label": "The name that will identify your project in the list.",
-    "tooltip.project_name_entry": "Enter the descriptive name of the project here.",
+    "tooltip.project_name_entry": "This is a much longer descriptive text for the project name field, specifically designed to test how the word wrapping behaves in the new tk.Message widget. We hope it doesn't cut any words abruptly.",
     "tooltip.local_path_label": "The folder on your disk where the project will be cloned or found.",
     "tooltip.local_path_entry": "Specify the full path to the project folder. It will be created if it doesn't exist for new clones.",
     "tooltip.browse_button": "Click to browse and select a local folder.",

@@ -144,7 +144,7 @@
     "Pushing Project Operation Name": "Empujar Proyecto",
     "Refresh Statuses Operation Name": "Actualizar Estados",
     "tooltip.project_name_label": "El nombre que identificará tu proyecto en la lista.",
-    "tooltip.project_name_entry": "Introduce el nombre descriptivo del proyecto aquí.",
+    "tooltip.project_name_entry": "Este es un texto descriptivo mucho más largo para el campo de nombre del proyecto, diseñado específicamente para probar cómo se comporta el ajuste de palabras en el nuevo widget tk.Message. Esperamos que no corte ninguna palabra de forma abrupta.",
     "tooltip.local_path_label": "La carpeta en tu disco donde se clonará o encontrará el proyecto.",
     "tooltip.local_path_entry": "Especifica la ruta completa a la carpeta del proyecto. Se creará si no existe para clones nuevos.",
     "tooltip.browse_button": "Haz clic para buscar y seleccionar una carpeta local.",

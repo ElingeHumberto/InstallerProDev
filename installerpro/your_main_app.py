@@ -175,6 +175,118 @@ class Tooltip:
             self.tooltip_window.destroy()
             self.tooltip_window = None
 
+class HelpPopup:
+    """
+    Muestra una pequeña ventana emergente (popup) no modal con texto de ayuda,
+    activada por un clic y posicionada junto a un widget ancla.
+    Se cierra con la tecla Escape o haciendo clic en su botón de cierre.
+    """
+    def __init__(self, anchor_widget, title, text_to_display):
+        print(f"DEBUG: HelpPopup.__init__ - Ancla: {anchor_widget}, Título: '{title}', Texto: '{text_to_display[:50]}...'") # DEBUG (muestra solo parte del texto)
+        self.anchor_widget = anchor_widget
+        self.title = title 
+        self.help_text = text_to_display
+        self.popup_window = None
+        if not self.help_text or not self.help_text.strip(): # Si el texto está vacío o solo espacios
+            print("DEBUG: HelpPopup.__init__ - Texto de ayuda vacío. No se creará el popup.") #DEBUG
+            return # No crear el popup si no hay texto que mostrar
+        self._create_popup()
+
+    # Dentro de la clase HelpPopup, reemplaza el método _create_popup con este:
+    def _create_popup(self):
+        print("DEBUG: HelpPopup._create_popup (ESTILO REFINADO)") # DEBUG
+        if self.popup_window:
+            print("DEBUG: HelpPopup._create_popup - popup_window ya existe, retornando.") # DEBUG
+            return
+
+        # --- Configuración de Estilo y Color ---
+        INFO_BG_COLOR = "#F0F0F0"      # Un gris claro, sofisticado y neutro
+        INFO_TEXT_COLOR = "#202020"    # Texto oscuro para buena legibilidad
+        INFO_BORDER_COLOR = "#B0B0B0"  # Un borde gris medio, sutil
+        CLOSE_BUTTON_FG = "#606060"    # Color del icono "X"
+        CLOSE_BUTTON_ACTIVE_BG = "#DCDCDC" # Color de fondo del botón "X" al pasar el cursor/hacer clic
+
+        x = self.anchor_widget.winfo_rootx() + self.anchor_widget.winfo_width() + 5
+        y = self.anchor_widget.winfo_rooty()
+
+        self.popup_window = tk.Toplevel(self.anchor_widget)
+        print(f"DEBUG: HelpPopup._create_popup - Toplevel creado: {self.popup_window}") #DEBUG
+        
+        self.popup_window.wm_overrideredirect(True)
+        self.popup_window.wm_geometry(f"+{x}+{y}")
+        self.popup_window.attributes("-topmost", True)
+
+        # Estilo para el frame principal del popup
+        # Para el borde, en tk.Frame (no ttk) podríamos usar highlightbackground y highlightthickness
+        # pero con ttk.Frame, relief y borderwidth es lo estándar.
+        # El color del borde con ttk.Frame es más dependiente del tema del OS.
+        s = ttk.Style()
+        s.configure("InfoPopup.TFrame", background=INFO_BG_COLOR, borderwidth=1, relief="solid") 
+        # Para un borde más notorio con color específico, podríamos usar un tk.Frame exterior
+        # y un ttk.Frame interior, o dibujar el borde manualmente (más complejo).
+        # Por ahora, mantenemos el borde simple de ttk.Frame.
+
+        # Frame principal que contendrá todo
+        main_frame = ttk.Frame(self.popup_window, style="InfoPopup.TFrame")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # --- Cabecera Minimalista para el Botón de Cierre ---
+        # Este frame tendrá el mismo fondo que el contenido para integrarse.
+        header_bar = ttk.Frame(main_frame, style="InfoPopup.TFrame") 
+        # Padding interno mínimo para esta barra, solo para que el botón no esté pegado a los bordes del popup.
+        header_bar.pack(side=tk.TOP, fill=tk.X, padx=1, pady=1) 
+
+        close_button = tk.Button(header_bar, text="\u2715", command=self.close, 
+                                 relief=tk.FLAT, font=("DejaVu Sans", 9, "normal"), # Tamaño de fuente ajustado
+                                 fg=CLOSE_BUTTON_FG, bg=INFO_BG_COLOR, # Fondo igual al de la cabecera
+                                 activebackground=CLOSE_BUTTON_ACTIVE_BG, activeforeground="black",
+                                 bd=0, highlightthickness=0, 
+                                 padx=4, pady=0) # Padding horizontal para el botón en sí
+        close_button.pack(side=tk.RIGHT)
+
+        # --- Contenido del Mensaje con Más Espacio Interno ---
+        content_message = tk.Message(main_frame, text=self.help_text, 
+                                 background=INFO_BG_COLOR,
+                                 fg=INFO_TEXT_COLOR,
+                                 width=280,
+                                 justify=tk.LEFT, font=("tahoma", 8, "normal"),
+                                 padx=15) # << QUITA pady=(5, 15) DE AQUÍ
+
+        # Aplica el pady en el método pack()
+        content_message.pack(fill=tk.BOTH, expand=True, pady=(5, 15)) # << AÑADE pady=(5, 15) AQUÍ
+
+        # Forzar actualización para obtener geometría y visibilidad correctas
+        if self.popup_window:
+            self.popup_window.update_idletasks() 
+            geom = self.popup_window.winfo_geometry()
+            visible = self.popup_window.winfo_viewable()
+            pos_x = self.popup_window.winfo_x()
+            pos_y = self.popup_window.winfo_y()
+            print(f"DEBUG: HelpPopup._create_popup (REFINADO) - Geometría: {geom}, Visible: {visible}, Pos: ({pos_x},{pos_y})") # DEBUG
+        
+        self.popup_window.bind("<Escape>", lambda e: self.close())
+        # El foco se gestiona desde _show_field_help a través de self.current_help_popup.focus()
+
+        print("DEBUG: HelpPopup._create_popup (REFINADO) - Finalizado.") # DEBUG
+
+    def close(self):
+        print("DEBUG: HelpPopup.close - Intentando cerrar.") # DEBUG
+        if self.popup_window:
+            print(f"DEBUG: HelpPopup.close - Destruyendo ventana: {self.popup_window}") # DEBUG
+            self.popup_window.destroy()
+            self.popup_window = None
+        else:
+            print("DEBUG: HelpPopup.close - No hay popup_window para destruir.") # DEBUG
+
+    def focus(self):
+        """Establece el foco en la ventana emergente."""
+        print("DEBUG: HelpPopup.focus - Intentando establecer foco en self.popup_window") # DEBUG
+        if self.popup_window:
+            self.popup_window.focus_set()
+            print("DEBUG: HelpPopup.focus - self.popup_window.focus_set() llamado.") # DEBUG
+        else:
+            print("DEBUG: HelpPopup.focus - self.popup_window es None, no se puede establecer foco.") # DEBUG
+
 # --- CLASE ADDPROJECTDIALOG ---
 class AddProjectDialog(tk.Toplevel):
     def __init__(self, master_window, t_func, base_folder): # t_func es self.t de la app principal
@@ -202,46 +314,94 @@ class AddProjectDialog(tk.Toplevel):
         frame = ttk.Frame(self, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
 
+        # --- Configuración de las Columnas del Frame ---
+        # Columna 0: Etiquetas (sin expansión)
+        # Columna 1: Campos de entrada (se expandirán con el peso)
+        # Columna 2: Botones de información (sin expansión)
+        # Columna 3: Botón "Examinar" (sin expansión, solo para la fila de Ruta Local)
+        frame.columnconfigure(0, weight=0) 
+        frame.columnconfigure(1, weight=1) # Esta columna (campos de entrada) se expandirá
+        frame.columnconfigure(2, weight=0) 
+        frame.columnconfigure(3, weight=0)
+
+
+        # --- Nombre del Proyecto ---
         name_label = ttk.Label(frame, text=self.t("Project Name"))
         name_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.name_entry = ttk.Entry(frame, width=40)
+        
+        self.name_entry = ttk.Entry(frame, width=40) 
         self.name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        Tooltip(name_label, self.t("tooltip.project_name_label")) # Correcto: usa self.t
-        Tooltip(self.name_entry, self.t("tooltip.project_name_entry")) # Correcto: usa self.t
+        
+        # ---- NUEVO: Botón de información para Nombre del Proyecto ----
+        # Usamos el carácter "ⓘ" (SMALL CIRCLED i)
+        # El command llama a _show_field_help, pasando el propio botón como ancla
+        # y la clave de traducción para el texto de ayuda (reutilizamos la del tooltip del entry).
+        name_info_button = ttk.Button(frame, text="ⓘ", width=2, # width=2 para un botón pequeño
+                                      command=lambda: self._show_field_help(name_info_button, "tooltip.project_name_entry")) 
+                                      # Nota: pasamos name_info_button como ancla
+        name_info_button.grid(row=0, column=2, padx=(0, 5), pady=5, sticky="w")
+        
+        # ---- COMENTAR O ELIMINAR LOS TOOLTIPS ANTERIORES PARA ESTE CAMPO ----
+        # Tooltip(name_label, self.t("tooltip.project_name_label")) 
+        # Tooltip(self.name_entry, self.t("tooltip.project_name_entry")) 
 
+
+        # --- Ruta Local ---
         local_path_label = ttk.Label(frame, text=self.t("Local Path Label"))
         local_path_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        
         self.local_path_var = tk.StringVar()
         self.local_path_entry = ttk.Entry(frame, textvariable=self.local_path_var, width=40)
         self.local_path_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        Tooltip(local_path_label, self.t("tooltip.local_path_label")) # Correcto: usa self.t
-        Tooltip(self.local_path_entry, self.t("tooltip.local_path_entry")) # Correcto: usa self.t
+        
+        # (Aquí añadiremos el botón "ⓘ" para Ruta Local en el siguiente paso,
+        #  después de probar que el primero funciona)
+        # local_path_info_button = ttk.Button(frame, text="ⓘ", ...)
+        # local_path_info_button.grid(row=1, column=2, ...)
 
         browse_button = ttk.Button(frame, text=self.t("Browse Button"), command=self._browse_local_path)
-        browse_button.grid(row=1, column=2, padx=5, pady=5)
-        Tooltip(browse_button, self.t("tooltip.browse_button")) # Correcto: usa self.t
+        # El botón Examinar ahora va en la columna 3 para dejar espacio al botón de info en la columna 2
+        browse_button.grid(row=1, column=3, padx=5, pady=5, sticky="w") 
         
-        # Inicializar local_path_var después de crear name_entry
+        # ---- COMENTAR O ELIMINAR TOOLTIPS ANTERIORES PARA RUTA LOCAL ----
+        # Tooltip(local_path_label, self.t("tooltip.local_path_label"))
+        # Tooltip(self.local_path_entry, self.t("tooltip.local_path_entry"))
+        # Tooltip(browse_button, self.t("tooltip.browse_button")) # Puedes decidir si este se queda o también se va
+
+
+        # Inicializar local_path_var (sin cambios aquí)
         default_name_placeholder = self.name_entry.get() or self.t("New Project Default Name")
         self.local_path_var.set(os.path.join(self.base_folder, default_name_placeholder))
 
-
+        # --- URL del Repositorio ---
         repo_url_label = ttk.Label(frame, text=self.t("Repository URL Label"))
         repo_url_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        
         self.repo_url_entry = ttk.Entry(frame, width=40)
-        self.repo_url_entry.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
-        Tooltip(repo_url_label, self.t("tooltip.repo_url_label")) # Correcto: usa self.t
-        Tooltip(self.repo_url_entry, self.t("tooltip.repo_url_entry")) # Correcto: usa self.t
+        # El columnspan ya no es necesario si la columna 2 es para el botón de info y la 1 se expande.
+        self.repo_url_entry.grid(row=2, column=1, padx=5, pady=5, sticky="ew") 
+        
+        # (Aquí añadiremos el botón "ⓘ" para URL del Repositorio después)
+        # ---- COMENTAR O ELIMINAR TOOLTIPS ANTERIORES ----
+        # Tooltip(repo_url_label, self.t("tooltip.repo_url_label")) 
+        # Tooltip(self.repo_url_entry, self.t("tooltip.repo_url_entry")) 
 
+        # --- Rama (Opcional) ---
         branch_label = ttk.Label(frame, text=self.t("Branch Optional Label"))
         branch_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        
         self.branch_entry = ttk.Entry(frame, width=40)
-        self.branch_entry.grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
-        Tooltip(branch_label, self.t("tooltip.branch_label")) # Correcto: usa self.t
-        Tooltip(self.branch_entry, self.t("tooltip.branch_entry")) # Correcto: usa self.t
+        self.branch_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
+        
+        # (Aquí añadiremos el botón "ⓘ" para Rama después)
+        # ---- COMENTAR O ELIMINAR TOOLTIPS ANTERIORES ----
+        # Tooltip(branch_label, self.t("tooltip.branch_label")) 
+        # Tooltip(self.branch_entry, self.t("tooltip.branch_entry")) 
 
+        # --- Botones de Acción (Añadir, Cancelar) ---
         button_frame = ttk.Frame(frame)
-        button_frame.grid(row=4, column=0, columnspan=3, pady=10)
+        # Ajustar columnspan para que el frame de botones ocupe las 4 columnas (0, 1, 2, 3)
+        button_frame.grid(row=4, column=0, columnspan=4, pady=10) 
 
         ttk.Button(button_frame, text=self.t("Add Button"), command=self._on_ok).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text=self.t("Cancel Button"), command=self._on_cancel).pack(side=tk.LEFT, padx=5)
@@ -261,6 +421,44 @@ class AddProjectDialog(tk.Toplevel):
         )
         if folder_selected:
             self.local_path_var.set(folder_selected)
+
+    def _on_dialog_destroy(self, event):
+        # Asegurarse de que el evento es para este widget (evitar cierres por hijos)
+        if event.widget == self:
+            if self.current_help_popup:
+                self.current_help_popup.close()
+                self.current_help_popup = None
+
+    def _show_field_help(self, anchor_widget, help_text_key):
+        print(f"DEBUG: _show_field_help llamado para clave: '{help_text_key}', ancla: {anchor_widget}") # DEBUG
+        if self.current_help_popup:
+            print("DEBUG: Cerrando HelpPopup existente.") # DEBUG
+            self.current_help_popup.close()
+            self.current_help_popup = None
+        
+        help_text = self.t(help_text_key)
+        popup_title = self.t("help.popup_title") 
+        print(f"DEBUG: _show_field_help - Título traducido: '{popup_title}'") # DEBUG
+        print(f"DEBUG: _show_field_help - Texto de ayuda original de t(): '{help_text}'") # DEBUG
+
+        if help_text == help_text_key: # Si la traducción devolvió la clave misma
+            print(f"DEBUG: _show_field_help - Clave '{help_text_key}' no encontrada en JSON, usando placeholder.") # DEBUG
+            help_text = self.t("help.not_available_placeholder")
+            print(f"DEBUG: _show_field_help - Texto de ayuda placeholder: '{help_text}'") # DEBUG
+
+        if not help_text: # Comprobar si el texto de ayuda es vacío o None
+            print("DEBUG: _show_field_help - Texto de ayuda final es vacío o None. No se creará el popup.") #DEBUG
+            return
+
+        print("DEBUG: _show_field_help - Creando instancia de HelpPopup...") #DEBUG
+        self.current_help_popup = HelpPopup(anchor_widget, popup_title, help_text)
+        print(f"DEBUG: _show_field_help - Instancia de HelpPopup creada: {self.current_help_popup}") # DEBUG
+        
+        if self.current_help_popup and self.current_help_popup.popup_window:
+            print("DEBUG: _show_field_help - Llamando focus() en la ventana del popup.") # DEBUG
+            self.current_help_popup.focus()
+        else:
+            print("DEBUG: _show_field_help - HelpPopup o su popup_window es None después de la creación.") # DEBUG
 
     def _on_ok(self):
         name = self.name_entry.get().strip()
@@ -301,6 +499,30 @@ class AddProjectDialog(tk.Toplevel):
         x = master_x + (master_width // 2) - (width // 2)
         y = master_y + (master_height // 2) - (height // 2)
         self.geometry(f'{width}x{height}+{x}+{y}')
+
+    def __init__(self, master_window, t_func, base_folder):
+        super().__init__(master_window)
+
+        self.master_window = master_window
+        self.t = t_func
+        self.base_folder = base_folder
+        self.current_help_popup = None # <<<< AÑADE ESTA LÍNEA
+
+        self.title(self.t("Add Project Title"))
+
+        self.transient(self.master_window)
+        self.grab_set()
+
+        self._create_widgets()
+        self._center_window()
+
+        self.name_entry.focus_set()
+        self.result = None
+
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.name_entry.bind("<KeyRelease>", self._update_local_path_on_name_change)
+        # Asegúrate de cerrar el help popup si el diálogo se destruye
+        self.bind("<Destroy>", self._on_dialog_destroy, add='+') 
 
 # --- CLASE INSTALLERPROAPP (CON MODIFICACIONES) ---
 class InstallerProApp:
