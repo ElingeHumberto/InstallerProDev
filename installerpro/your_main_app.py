@@ -1,4 +1,4 @@
-# installerpro/your_main_app.py (Versión Final Unificada)
+# installerpro/your_main_app.py (Versión Final, Completa y Verificada)
 import os
 import sys
 import logging
@@ -15,21 +15,18 @@ except ImportError:
     print("ERROR: GitPython no está instalado. Por favor, ejecuta 'pip install GitPython'")
     sys.exit(1)
 
-
 # --- CONFIGURACIÓN INICIAL ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- IMPORTACIONES LOCALES ---
-# Asegurarse de que el directorio padre esté en el path para las importaciones
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from installerpro import i18n
 from installerpro.utils import git_operations
 from installerpro.ui_dialogs import AddProjectDialog, Tooltip
-
 
 # ==============================================================================
 # CLASE ConfigManager
@@ -127,6 +124,7 @@ class ProjectManager:
         return [p for p in self.projects if not p.get('deleted', False)]
 
     def get_project_by_path(self, local_path):
+        if not local_path: return None
         for p in self.projects:
             if os.path.normpath(p['local_path']) == os.path.normpath(local_path): return p
         return None
@@ -162,9 +160,7 @@ class ProjectManager:
                 if os.path.normpath(repo_path) not in existing_paths:
                     try:
                         name = os.path.basename(repo_path)
-                        repo_url = git_operations.get_repo_remote_url(repo_path)
-                        branch = git_operations.get_repo_current_branch(repo_path)
-                        new_project = {"name": name, "local_path": repo_path, "repo_url": repo_url, "branch": branch, "status": "Unknown", "deleted": False}
+                        new_project = {"name": name, "local_path": repo_path, "repo_url": "N/A", "branch": "N/A", "status": "Unknown", "deleted": False}
                         self.projects.append(new_project)
                         found_count += 1
                     except Exception as e:
@@ -174,31 +170,20 @@ class ProjectManager:
         return found_count
 
     def refresh_project_statuses(self):
-        """
-        Refresca TODA la información de los proyectos: estado, rama y URL remota.
-        """
         logger.info("Refreshing all project data...")
         something_changed = False
         for project in self.get_projects():
-            old_status = project.get('status')
-            old_branch = project.get('branch')
-            old_url = project.get('repo_url')
-
+            old_status, old_branch, old_url = project.get('status'), project.get('branch'), project.get('repo_url')
             project['status'] = git_operations.get_repo_status(project['local_path'])
             project['branch'] = git_operations.get_repo_current_branch(project['local_path'])
             project['repo_url'] = git_operations.get_repo_remote_url(project['local_path'])
-
-            if (project['status'] != old_status or 
-                project['branch'] != old_branch or 
-                project['repo_url'] != old_url):
+            if (project['status'] != old_status or project['branch'] != old_branch or project['repo_url'] != old_url):
                 something_changed = True
-    
         if something_changed:
             logger.info("Project data has changed, saving updates.")
             self._save_projects()
         else:
             logger.info("No changes in project data detected.")
-
 
     def get_changed_files_for_project(self, local_path):
         return git_operations.get_changed_files(local_path)
@@ -230,12 +215,13 @@ class InstallerProApp:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         locales_path = os.path.join(base_dir, 'utils', 'locales')
         i18n.set_locales_dir(locales_path)
-        self._initialize_language()
+        
+        self._initialize_language() # <- Llamada que fallaba antes
         self.t = i18n.t
         
         self.staged_files = {}
         self.task_queue = Queue()
-        self._setup_ui() # <- La llamada que fallaba antes
+        self._setup_ui() # <- Llamada que fallaba antes
         self.update_ui_texts()
         self.master.after(100, self._process_task_queue)
         
@@ -272,7 +258,6 @@ class InstallerProApp:
 
     def _setup_ui(self):
         self.master.geometry("900x700")
-        self.master.title(self.t("App Title"))
         style = ttk.Style(self.master)
         if 'clam' in style.theme_names(): style.theme_use('clam')
         
@@ -288,39 +273,28 @@ class InstallerProApp:
         self.main_paned_window = ttk.PanedWindow(self.main_frame, orient=tk.VERTICAL)
         self.main_paned_window.grid(row=0, column=0, sticky="nsew", pady=5)
 
-        top_pane = ttk.Frame(self.main_paned_window)
-        top_pane.columnconfigure(0, weight=1); top_pane.rowconfigure(0, weight=1)
+        top_pane = ttk.Frame(self.main_paned_window); top_pane.columnconfigure(0, weight=1); top_pane.rowconfigure(0, weight=1)
         self.main_paned_window.add(top_pane, weight=2)
         
         tree_scrollbar_y = ttk.Scrollbar(top_pane, orient="vertical")
         columns = ("name", "path", "url", "branch", "status")
         self.tree = ttk.Treeview(top_pane, columns=columns, show="headings", yscrollcommand=tree_scrollbar_y.set)
         tree_scrollbar_y.config(command=self.tree.yview)
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        tree_scrollbar_y.grid(row=0, column=1, sticky="ns")
+        self.tree.grid(row=0, column=0, sticky="nsew"); tree_scrollbar_y.grid(row=0, column=1, sticky="ns")
         self.tree.bind('<<TreeviewSelect>>', self._on_project_select)
 
-        self.commit_pane = ttk.Frame(self.main_paned_window, padding=5)
-        self.commit_pane.columnconfigure(0, weight=1); self.commit_pane.rowconfigure(1, weight=1)
+        self.commit_pane = ttk.Frame(self.main_paned_window, padding=5); self.commit_pane.columnconfigure(0, weight=1); self.commit_pane.rowconfigure(1, weight=1)
         self.main_paned_window.add(self.commit_pane, weight=3)
-        self.files_tree_label = ttk.Label(self.commit_pane, font=("tahoma", 10, "bold"))
-        self.files_tree_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
+        self.files_tree_label = ttk.Label(self.commit_pane, font=("tahoma", 10, "bold")); self.files_tree_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
         
-        files_frame = ttk.Frame(self.commit_pane)
-        files_frame.grid(row=1, column=0, sticky='nsew')
-        files_frame.rowconfigure(0, weight=1); files_frame.columnconfigure(0, weight=1)
-        
+        files_frame = ttk.Frame(self.commit_pane); files_frame.grid(row=1, column=0, sticky='nsew'); files_frame.rowconfigure(0, weight=1); files_frame.columnconfigure(0, weight=1)
         file_columns = ("status", "path"); self.files_tree = ttk.Treeview(files_frame, columns=file_columns, show="tree headings")
-        files_tree_scrollbar_y = ttk.Scrollbar(files_frame, orient="vertical", command=self.files_tree.yview)
-        files_tree_scrollbar_x = ttk.Scrollbar(files_frame, orient="horizontal", command=self.files_tree.xview)
+        files_tree_scrollbar_y = ttk.Scrollbar(files_frame, orient="vertical", command=self.files_tree.yview); files_tree_scrollbar_x = ttk.Scrollbar(files_frame, orient="horizontal", command=self.files_tree.xview)
         self.files_tree.configure(yscrollcommand=files_tree_scrollbar_y.set, xscrollcommand=files_tree_scrollbar_x.set)
         self.files_tree.grid(row=0, column=0, sticky='nsew'); files_tree_scrollbar_y.grid(row=0, column=1, sticky='ns'); files_tree_scrollbar_x.grid(row=1, column=0, sticky='ew')
         
-        self.files_tree.column("#0", width=50, anchor="center", stretch=False)
-        self.files_tree.column("status", width=100, anchor="w", stretch=False)
-        self.files_tree.column("path", width=450, anchor="w")
-        self.files_tree.tag_configure('unchecked', foreground='gray', font=('Segoe UI Symbol', 11))
-        self.files_tree.tag_configure('checked', foreground='#007ACC', font=('Segoe UI Symbol', 11))
+        self.files_tree.column("#0", width=50, anchor="center", stretch=False); self.files_tree.column("status", width=100, anchor="w", stretch=False); self.files_tree.column("path", width=450, anchor="w")
+        self.files_tree.tag_configure('unchecked', foreground='gray', font=('Segoe UI Symbol', 11)); self.files_tree.tag_configure('checked', foreground='#007ACC', font=('Segoe UI Symbol', 11))
         self.files_tree.bind('<Button-1>', self._toggle_file_stage_status)
         
         self.commit_action_frame = ttk.Frame(self.commit_pane); self.commit_action_frame.grid(row=2, column=0, sticky='ew', pady=(5, 0)); self.commit_action_frame.columnconfigure(0, weight=1)
@@ -338,7 +312,6 @@ class InstallerProApp:
         self.base_folder_label = ttk.Label(self.main_frame, text=""); self.base_folder_label.grid(row=2, column=0, sticky="ew", padx=5, pady=(5,0))
 
     def _populate_language_menu(self):
-        # ... (código existente)
         self.lang_menu.delete(0, tk.END)
         self.selected_language_var = tk.StringVar(value=self.config_manager.get_setting('language'))
         self.lang_menu.add_radiobutton(label=self.t("language_option.system"), command=lambda: self.change_language("system"), variable=self.selected_language_var, value="system")
@@ -347,21 +320,26 @@ class InstallerProApp:
             self.lang_menu.add_radiobutton(label=self.t(f"language_option.{lang_code}", fallback=lang_code.upper()), command=lambda lc=lang_code: self.change_language(lc), variable=self.selected_language_var, value=lang_code)
 
     def update_ui_texts(self):
-        # ... (código existente)
         self.master.title(self.t("App Title"))
         self._recreate_menubar()
-        column_map = {"name": ("Project Name Column", 150), "path": ("Local Path Column", 300), "url": ("Repository URL Column", 300), "branch": ("Branch Column", 100), "status": ("Status Column", 100)}
+        column_map = {"name": ("Project Name Column", 150), "path": ("Local Path Column", 250), "url": ("Repository URL Column", 250), "branch": ("Branch Column", 100), "status": ("Status Column", 100)}
         for col, (key, width) in column_map.items():
             self.tree.heading(col, text=self.t(key)); self.tree.column(col, width=width, minwidth=int(width*0.5))
-        button_map_texts = {"add": "add_button", "remove": "remove_button", "update": "update_button", "scan_base_folder": "scan_base_folder_button", "push": "push_button", "refresh_status": "refresh_status_button", "help": "help_button"}
-        for key, attr_name in button_map_texts.items():
-            if hasattr(self, attr_name): getattr(self, attr_name).config(text=self.t(f"button.{key}"))
+        button_keys = ["add", "remove", "update", "scan_base_folder", "push", "refresh_status", "help"]
+        for key in button_keys:
+            button = getattr(self, f"{key}_button", None)
+            if button: button.config(text=self.t(f"button.{key}"))
+        
         if hasattr(self, 'files_tree_label'): self.files_tree_label.config(text=self.t("Changed files title"))
         if hasattr(self, 'files_tree'):
             self.files_tree.heading("#0", text=self.t("Staged Column")); self.files_tree.heading("status", text=self.t("File Status Column")); self.files_tree.heading("path", text=self.t("File Path Column"))
-        if hasattr(self, 'commit_message_container'): self.commit_message_container.config(text=self.t("Commit Message Title"))
-        if hasattr(self, 'stage_all_button'): self.stage_all_button.config(text=self.t("Stage All Button"))
-        if hasattr(self, 'commit_button'): self.commit_button.config(text=self.t("Commit Button"))
+        
+        commit_message_container = self.commit_action_frame.winfo_children()[0]
+        if isinstance(commit_message_container, ttk.LabelFrame): commit_message_container.config(text=self.t("Commit Message Title"))
+        
+        self.stage_all_button.config(text=self.t("Stage All Button"))
+        self.commit_button.config(text=self.t("Commit Button"))
+        
         self.update_base_folder_label()
         self._load_projects_into_treeview()
 
@@ -371,40 +349,27 @@ class InstallerProApp:
                 callback, args, kwargs = self.task_queue.get_nowait()
                 callback(*args, **kwargs)
         except Empty: pass
-        finally:
-            self.master.after(100, self._process_task_queue)
+        finally: self.master.after(100, self._process_task_queue)
 
     def update_base_folder_label(self):
         self.base_folder_label.config(text=self.t("base_folder_status_label", path=self.config_manager.get_base_folder()))
 
     def change_language(self, lang_code):
-        """Cambia el idioma, actualiza la configuración y refresca toda la UI."""
         current_lang = self.config_manager.get_setting('language')
-        if current_lang == lang_code:
-            if lang_code != "system" or (lang_code == "system" and current_lang == "system"):
-                logger.info(f"Language already set to '{lang_code}'. No change needed.")
-                return
-
-        # Guardamos la nueva preferencia del usuario
+        if current_lang == lang_code and lang_code != "system" : return
         self.config_manager.set_setting('language', lang_code)
-    
-        # Aplicamos el idioma y actualizamos la interfaz
         self._initialize_language()
         self.t = i18n.t
         self.update_ui_texts()
-    
-        messagebox.showinfo(
-            self.t("Language Changed Title"), 
-            self.t("Language changed message", lang=i18n.get_current_language())
-        )
+        messagebox.showinfo(parent=self.master, title=self.t("Language Changed Title"), message=self.t("Language changed message", lang=i18n.get_current_language()))
 
     def _load_projects_into_treeview(self):
         for item in self.tree.get_children(): self.tree.delete(item)
         projects = self.project_manager.get_projects()
-        for project in projects:
-            status_key = f"status.{project.get('status', 'unknown').lower()}"
-            status_display = self.t(status_key, fallback=project.get('status', "Unknown"))
-            self.tree.insert("", tk.END, values=(project['name'], project['local_path'], project['repo_url'], project['branch'], status_display))
+        for p in projects:
+            status_key = f"status.{p.get('status', 'unknown').lower().replace(' ', '_')}"
+            status_display = self.t(status_key, fallback=p.get('status', "Unknown"))
+            self.tree.insert("", tk.END, values=(p['name'], p['local_path'], p['repo_url'], p['branch'], status_display))
 
     def _get_selected_project_path(self):
         selected_item = self.tree.focus()
@@ -427,8 +392,8 @@ class InstallerProApp:
                     status_key = f"status.file.{file_info['status']}"
                     status_display = self.t(status_key, fallback=file_info['status'].capitalize())
                     self.files_tree.insert("", tk.END, text='☐', values=(status_display, file_info['path']), tags=('unchecked',))
-            except ProjectNotFoundError as e:
-                logger.error(f"Error getting changed files: {e}")
+            except ProjectNotFoundError:
+                logger.error(f"Project not found during file scan for {selected_path}")
         else:
             self.files_tree_label.config(text=self.t("Commit panel placeholder clean"))
 
@@ -443,39 +408,23 @@ class InstallerProApp:
         except IndexError: pass
         
     def _toggle_stage_all(self):
-        """Prepara o desprepara todos los archivos de la lista."""
         item_ids = self.files_tree.get_children()
-        if not item_ids:
-            return
-
-        # Lógica simplificada: si hay algo preparado, las quitamos todas.
-        # Si no hay nada preparado, las preparamos todas.
+        if not item_ids: return
         staged_count = sum(self.staged_files.values())
         new_stage_status = staged_count == 0
-
-        # Determinamos el estado visual y el texto del botón para la siguiente acción
         new_tag = 'checked' if new_stage_status else 'unchecked'
         new_text = '☑' if new_stage_status else '☐'
         next_action_key = "Unstage All Button" if new_stage_status else "Stage All Button"
-
-        # Iteramos sobre todos los archivos para actualizar tanto el estado lógico como la UI
         for item_id in item_ids:
-            values = self.files_tree.item(item_id, 'values')
-            if not values:
-                continue
-        
-            # --- CORRECCIÓN PRINCIPAL ---
-            # La ruta del archivo ahora está en la posición 1 de los valores, no en la 2.
             try:
-                file_path = values[1]
-                self.staged_files[file_path] = new_stage_status
-                self.files_tree.item(item_id, text=new_text, tags=(new_tag,))
+                values = self.files_tree.item(item_id, 'values')
+                if values:
+                    file_path = values[1]
+                    self.staged_files[file_path] = new_stage_status
+                    self.files_tree.item(item_id, text=new_text, tags=(new_tag,))
             except IndexError:
                 logger.warning(f"Could not process item {item_id} during toggle all.")
-    
-        # Actualizamos el texto del botón para que refleje la siguiente acción posible
         self.stage_all_button.config(text=self.t(next_action_key))
-
 
     def _run_async_task(self, target, *args, on_success=None, on_failure=None):
         def task_wrapper():
@@ -491,30 +440,22 @@ class InstallerProApp:
         dialog = AddProjectDialog(self.master, self.t, self.config_manager.get_base_folder())
         result = dialog.result
         if result:
-            self._run_async_task(self.project_manager.add_project, result['name'], result['repo_url'], result['local_path_full'], result['branch'],
-                                 on_success=self._on_project_added_success,
-                                 on_failure=lambda e: self._on_project_op_failure(e, "Adding Project"))
+            self._run_async_task(self.project_manager.add_project, result['name'], result['repo_url'], result['local_path_full'], result['branch'], on_success=self._on_project_added_success, on_failure=lambda e: self._on_project_op_failure(e, self.t("Adding Project Operation Name")))
 
     def _remove_project(self):
         path = self._get_selected_project_path()
         if not path: return
-        # ... (código existente) ...
-        pass
-        
+        project = self.project_manager.get_project_by_path(path)
+        if not project: return
+        name = project.get('name', 'Unnamed')
+        if messagebox.askyesno(parent=self.master, title=self.t("Confirm Remove Title"), message=self.t("Confirm soft delete message")):
+            self._run_async_task(self.project_manager.remove_project, path, permanent=False, on_success=lambda r: self._on_project_removed_success(name), on_failure=lambda e: self._on_project_op_failure(e, self.t("Removing Project Operation Name")))
+
     def _update_project(self):
         path = self._get_selected_project_path()
-        if not path:
-            return  # Si no hay ruta, no hacemos nada.
-
+        if not path: return
         project = self.project_manager.get_project_by_path(path)
-        if project:
-            self._run_async_task(
-                self.project_manager.update_project,
-                path,
-                project['branch'],
-                on_success=self._on_project_updated_success,
-                on_failure=lambda e: self._on_project_op_failure(e, self.t("Updating Project Operation Name"))
-            )
+        if project: self._run_async_task(self.project_manager.update_project, path, project['branch'], on_success=self._on_project_updated_success, on_failure=lambda e: self._on_project_op_failure(e, self.t("Updating Project Operation Name")))
 
     def _scan_base_folder(self):
         folder = filedialog.askdirectory(parent=self.master, initialdir=self.config_manager.get_base_folder())
@@ -522,77 +463,77 @@ class InstallerProApp:
             self.config_manager.set_base_folder(folder)
             self.project_manager.set_base_folder(folder)
             self.update_base_folder_label()
-            self._run_async_task(self.project_manager.scan_base_folder,
-                                 on_success=self._on_scan_complete_success,
-                                 on_failure=lambda e: self._on_project_op_failure(e, "Scanning Folder"))
+            self._run_async_task(self.project_manager.scan_base_folder, on_success=self._on_scan_complete_success, on_failure=lambda e: self._on_project_op_failure(e, self.t("Scanning Folder")))
 
     def _push_project(self):
         path = self._get_selected_project_path()
-        if path: self._run_async_task(self.project_manager.push_project, path, on_success=self._on_project_pushed_success, on_failure=lambda e: self._on_project_op_failure(e, "Pushing Project"))
+        if path: self._run_async_task(self.project_manager.push_project, path, on_success=self._on_project_pushed_success, on_failure=lambda e: self._on_project_op_failure(e, self.t("Pushing Project")))
 
     def _refresh_all_statuses(self):
-        self._run_async_task(self.project_manager.refresh_project_statuses, on_success=self._on_refresh_status_complete_success, on_failure=lambda e: self._on_project_op_failure(e, "Refreshing Statuses"))
+        self._run_async_task(self.project_manager.refresh_project_statuses, on_success=self._on_refresh_status_complete_success, on_failure=lambda e: self._on_project_op_failure(e, self.t("Refreshing Statuses")))
 
     def _show_help(self):
-        messagebox.showinfo("Help", "Help content will be added here.")
+        messagebox.showinfo(parent=self.master, title=self.t("help.title"), message=self.t("help.content"))
     
     def _perform_commit(self):
+        # --- AÑADE ESTA LÍNEA AL INICIO DE LA FUNCIÓN ---
         from installerpro.core import security_analyzer
+    
         selected_path = self._get_selected_project_path()
         if not selected_path: return
         files_to_commit = [path for path, staged in self.staged_files.items() if staged]
         if not files_to_commit:
-            messagebox.showwarning(self.t("Commit Warning Title"), self.t("No files staged for commit message"))
+            messagebox.showwarning(parent=self.master, title=self.t("Commit Warning Title"), message=self.t("No files staged for commit message"))
             return
         commit_message = self.commit_message_text.get("1.0", tk.END).strip()
         if not commit_message:
-            messagebox.showwarning(self.t("Commit Warning Title"), self.t("Commit message cannot be empty message"))
+            messagebox.showwarning(parent=self.master, title=self.t("Commit Warning Title"), message=self.t("Commit message cannot be empty message"))
             return
 
+        # El resto de la función continúa igual...
         findings = security_analyzer.scan_files_for_secrets(files_to_commit, selected_path)
         if findings:
             details = "\n".join([f"- {f['file']}:{f['line']} ({f['type']})" for f in findings])
-        
-            # --- LÍNEAS CORREGIDAS CON TRADUCCIÓN ---
-            title = self.t("Security Warning Title", fallback="Security Warning")
-            message = self.t("Security warning message", details=details, fallback=f"Potential secrets detected:\n{details}\n\nProceed anyway?")
-        
+            title = self.t("Security Warning Title")
+            message = self.t("Security warning message", details=details)
             if not messagebox.askyesno(title, message, parent=self.master):
                 return
         
-        self._run_async_task(self.project_manager.commit_project_changes, selected_path, files_to_commit, commit_message,
+        self._run_async_task(
+            self.project_manager.commit_project_changes,
+            selected_path,
+            files_to_commit,
+            commit_message,
             on_success=self._on_commit_success,
-            on_failure=lambda e: self._on_project_op_failure(e, "Commit"))
-
+            on_failure=lambda e: self._on_project_op_failure(e, self.t("Commit Operation Name"))
+        )
     def _on_commit_success(self, result):
-        messagebox.showinfo("Success", "Commit successful.")
-        self.commit_message_text.delete("1.0", tk.END)
-        self._on_project_select()
+        messagebox.showinfo(parent=self.master, title=self.t("Commit Success Title"), message=self.t("Commit success message"))
+        self.commit_message_text.delete("1.0", tk.END); self._on_project_select()
     
     def _on_project_added_success(self, new_project):
         self._load_projects_into_treeview()
 
     def _on_project_op_failure(self, error, op_name):
-        messagebox.showerror("Error", f"Error during {op_name}:\n{error}")
+        messagebox.showerror(parent=self.master, title=self.t("Error Title"), message=self.t("Generic error message", op_name=op_name, error_message=str(error)))
         self._load_projects_into_treeview()
         
     def _on_project_updated_success(self, result):
-        self._load_projects_into_treeview()
+        self._load_projects_into_treeview(); messagebox.showinfo(parent=self.master, title=self.t("Update Complete Title"), message=self.t("Project Updated Success message"))
     
     def _on_project_pushed_success(self, result):
-        self._load_projects_into_treeview()
+        self._load_projects_into_treeview(); messagebox.showinfo(parent=self.master, title=self.t("Push Complete Title"), message=self.t("Project Pushed Success message"))
         
     def _on_scan_complete_success(self, count):
-        self._load_projects_into_treeview()
-        messagebox.showinfo("Scan Complete", f"Found {count} new projects.")
+        self._load_projects_into_treeview(); messagebox.showinfo(parent=self.master, title=self.t("Scan Complete Title"), message=self.t("Scan complete found new projects message", count=count))
         
     def _on_refresh_status_complete_success(self, _):
-        self._load_projects_into_treeview()
+        self._load_projects_into_treeview(); messagebox.showinfo(parent=self.master, title=self.t("Status Refresh Complete Title"), message=self.t("All project statuses refreshed message"))
 
     def run(self):
         self.master.mainloop()
 
-
+# Punto de entrada de la aplicación
 if __name__ == "__main__":
     root = tk.Tk()
     app = InstallerProApp(root)

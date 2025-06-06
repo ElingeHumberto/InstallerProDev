@@ -4,6 +4,7 @@ import os
 import logging
 import sys
 import git
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -13,37 +14,30 @@ class GitOperationError(Exception):
 
 def _run_cmd_with_output(command, cwd=None):
     """
-    Ejecuta un comando de shell leyendo bytes crudos y decodificando
-    explícitamente a UTF-8 para evitar errores de codificación de la consola.
+    Ejecuta un comando de shell, registrando stdout y stderr de forma informativa.
+    El éxito o fracaso se determina por el código de retorno.
     """
     logger.debug(f"Ejecutando comando: {' '.join(command)} en {cwd or os.getcwd()}")
     
-    # --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
-    # Ya no confiamos en la decodificación automática de text=True.
-    # Leemos los bytes crudos y los decodificamos nosotros a UTF-8.
     process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=1
+        command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
 
-    stdout_lines = []
-    stderr_lines = []
+    # Leemos stdout y stderr en hilos separados para evitar bloqueos
+    stdout_lines, stderr_lines = [], []
+    def read_pipe(pipe, line_list, log_level):
+        for line_bytes in iter(pipe.readline, b''):
+            line_str = line_bytes.decode('utf-8', errors='replace').strip()
+            line_list.append(line_str)
+            log_level(f"GIT_PIPE: {line_str}")
+        pipe.close()
 
-    # Leemos las líneas de bytes de stdout
-    for line_bytes in process.stdout:
-        line_str = line_bytes.decode('utf-8', errors='replace').strip()
-        stdout_lines.append(line_str)
-        logger.info(f"GIT_OUT: {line_str}")
-
-    # Leemos las líneas de bytes de stderr
-    for line_bytes in process.stderr:
-        line_str = line_bytes.decode('utf-8', errors='replace').strip()
-        stderr_lines.append(line_str)
-        logger.error(f"GIT_ERR: {line_str}")
-    # --- FIN DE LA CORRECCIÓN DEFINITIVA ---
+    stdout_thread = threading.Thread(target=read_pipe, args=(process.stdout, stdout_lines, logger.info))
+    stderr_thread = threading.Thread(target=read_pipe, args=(process.stderr, stderr_lines, logger.warning)) # Usamos WARNING para stderr
+    stdout_thread.start()
+    stderr_thread.start()
+    stdout_thread.join()
+    stderr_thread.join()
 
     return_code = process.wait()
     return return_code, "\n".join(stdout_lines), "\n".join(stderr_lines)
